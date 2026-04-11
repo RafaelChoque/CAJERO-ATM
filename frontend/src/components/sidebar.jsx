@@ -11,14 +11,17 @@ import {
 } from 'lucide-react';
 import LogoBisa from '../assets/logo-bisa.png';
 
+// El menú del administrador. Maneja si está colapsado (en PC) o si se abre como cajón (en Móvil)
 const Sidebar = ({ setVistaActiva, vistaActiva, isCollapsed, setIsCollapsed, isMobileOpen, setIsMobileOpen }) => {
   const { user, logout } = useAuth();
 
+  // Cambia la vista y esconde el menú si estamos en un celular
   const handleMenuClick = (vista) => {
       setVistaActiva(vista);
       setIsMobileOpen(false);
   };
 
+  // Lógica de diseño: Cambia el color del botón si es la vista que estamos viendo actualmente
   const getBtnClass = (id) => `
     w-full flex items-center py-3.5 text-sm rounded-xl transition-all duration-200
     ${isCollapsed && !isMobileOpen ? 'lg:justify-center px-0' : 'gap-x-4 px-5'}
@@ -29,6 +32,7 @@ const Sidebar = ({ setVistaActiva, vistaActiva, isCollapsed, setIsCollapsed, isM
 
   return (
     <>
+      {/* Botón "Hamburguesa" que solo aparece en pantallas chiquitas (Móvil/Tablet) */}
       <div className="lg:hidden fixed top-0 left-0 z-40 w-full bg-white shadow-sm border-b border-gray-200 px-5 py-3.5 flex justify-between items-center">
         <div className="flex items-center">
             <img src={LogoBisa} alt="Banco BISA" className="h-8 object-contain" />
@@ -41,6 +45,7 @@ const Sidebar = ({ setVistaActiva, vistaActiva, isCollapsed, setIsCollapsed, isM
         </button>
       </div>
 
+      {/* Fondo oscuro desenfocado que aparece cuando el menú sale en el móvil */}
       {isMobileOpen && (
           <div
               className="fixed inset-0 bg-slate-900/50 z-[50] lg:hidden backdrop-blur-sm transition-opacity"
@@ -48,6 +53,7 @@ const Sidebar = ({ setVistaActiva, vistaActiva, isCollapsed, setIsCollapsed, isM
           ></div>
       )}
 
+      {/* El panel lateral real. En móvil se traslada desde la izquierda, en PC siempre está visible */}
       <div
         className={`fixed top-0 start-0 bottom-0 z-[60] bg-white border-e border-gray-100 shadow-2xl lg:shadow-none transition-all duration-300 transform h-full flex flex-col
           ${isMobileOpen ? 'translate-x-0' : '-translate-x-full'}
@@ -56,6 +62,7 @@ const Sidebar = ({ setVistaActiva, vistaActiva, isCollapsed, setIsCollapsed, isM
       >
         <div className="relative flex flex-col h-full max-h-full">
 
+          {/* Logo y Botón para colapsar/expandir en PC */}
           <header className="py-6 relative flex items-center justify-center">
             {(!isCollapsed || isMobileOpen) && (
               <img src={LogoBisa} alt="Banco BISA" className="h-10 object-contain" />
@@ -69,6 +76,7 @@ const Sidebar = ({ setVistaActiva, vistaActiva, isCollapsed, setIsCollapsed, isM
             </button>
           </header>
 
+          {/* Enlaces de las vistas, solo visibles para el ADMINISTRADOR */}
           <nav className="flex-1 overflow-y-auto py-4 px-5 space-y-3">
             {user?.rol === 'ADMINISTRADOR' && (
               <>
@@ -90,6 +98,7 @@ const Sidebar = ({ setVistaActiva, vistaActiva, isCollapsed, setIsCollapsed, isM
             )}
           </nav>
 
+          {/* Sección de perfil y Logout en la parte inferior */}
           <div className="p-6 border-t border-gray-100 bg-gray-50/80">
             {(!isCollapsed || isMobileOpen) && (
               <div className="flex items-center mb-6">

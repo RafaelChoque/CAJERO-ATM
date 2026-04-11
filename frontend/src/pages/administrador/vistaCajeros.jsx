@@ -7,6 +7,7 @@ import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap } from 're
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 
+// Truco necesario para que los íconos de Leaflet (Los marcadores de mapa) no se rompan en React con Vite
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
     iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
@@ -14,25 +15,28 @@ L.Icon.Default.mergeOptions({
     shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
 
+// Componente hijo de Leaflet: Escucha cada vez que haces "Clic" en el mapa para capturar las coordenadas
 const LocationMarker = ({ position, setPosition }) => {
     useMapEvents({
         click(e) {
-            setPosition(e.latlng);
+            setPosition(e.latlng); // Guarda la latitud y longitud exacta del click
         },
     });
     return position === null ? null : <Marker position={position}></Marker>;
 };
 
+// Componente hijo de Leaflet: Ayuda a redibujar el mapa cuando se agranda a pantalla completa
 const MapResizer = ({ isExpanded }) => {
     const map = useMap();
     useEffect(() => {
         setTimeout(() => {
-            map.invalidateSize();
+            map.invalidateSize(); // Le dice a Leaflet "hey, la pantalla cambió de tamaño, arréglate"
         }, 300);
     }, [map, isExpanded]);
     return null;
 };
 
+// Cambia el centro y el zoom del mapa de manera dinámica (sin recargar la página)
 const ChangeView = ({ center, zoom }) => {
     const map = useMap();
     map.setView(center, zoom);
@@ -46,11 +50,12 @@ const VistaCajeros = () => {
     const [searchTerm, setSearchTerm] = useState('');
 
     const [showModal, setShowModal] = useState(false);
-    const [isEditing, setIsEditing] = useState(false);
+    const [isEditing, setIsEditing] = useState(false); // Define si el Modal es para CREAR o para EDITAR
 
     const [isMapExpanded, setIsMapExpanded] = useState(false);
     const [showNetworkMap, setShowNetworkMap] = useState(false);
 
+    // Coordenadas iniciales: Centro de La Paz, Bolivia
     const defaultCenter = { lat: -16.489689, lng: -68.119293 };
     const [networkMapCenter, setNetworkMapCenter] = useState(defaultCenter);
     const [networkMapZoom, setNetworkMapZoom] = useState(13);
@@ -59,6 +64,7 @@ const VistaCajeros = () => {
     const [formData, setFormData] = useState(initialFormState);
     const [mapPosition, setMapPosition] = useState(null);
 
+    // Al entrar por primera vez a esta vista, traemos todos los cajeros
     useEffect(() => {
         cargarCajeros();
     }, []);
@@ -66,7 +72,7 @@ const VistaCajeros = () => {
     const cargarCajeros = async () => {
         try {
             setCargando(true);
-            const response = await apiCall('/api/admin/cajeros/listar');
+            const response = await apiCall('/api/admin/cajeros/listar'); // <-- Petición segura con Token
             if (!response.ok) throw new Error("Error al cargar la red de ATMs");
             const data = await response.json();
             setCajeros(data);
@@ -87,6 +93,7 @@ const VistaCajeros = () => {
 
     const openEditModal = (cajero) => {
         setIsEditing(true);
+        // Llenamos el formulario con los datos que ya teníamos
         setFormData({
             idCajero: cajero.idCajero,
             codigoCajero: cajero.codigoCajero,
@@ -96,6 +103,7 @@ const VistaCajeros = () => {
             longitud: cajero.longitud || ''
         });
 
+        // Si ya tenía coordenadas en BD, ponemos el puntero rojo ahí
         if (cajero.latitud && cajero.longitud) {
             setMapPosition({ lat: parseFloat(cajero.latitud), lng: parseFloat(cajero.longitud) });
         } else {
@@ -109,7 +117,7 @@ const VistaCajeros = () => {
     const verCajeroEnMapa = (cajero) => {
         if (cajero.latitud && cajero.longitud) {
             setNetworkMapCenter({ lat: parseFloat(cajero.latitud), lng: parseFloat(cajero.longitud) });
-            setNetworkMapZoom(17);
+            setNetworkMapZoom(17); // Zoom más cercano al ver uno específico
             setShowNetworkMap(true);
         } else {
             showError("Este cajero no tiene coordenadas registradas en el mapa.");
@@ -118,12 +126,13 @@ const VistaCajeros = () => {
 
     const abrirMapaGlobal = () => {
         setNetworkMapCenter(defaultCenter);
-        setNetworkMapZoom(13);
+        setNetworkMapZoom(13); // Zoom alejado para ver toda la ciudad
         setShowNetworkMap(true);
     };
 
     const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
+    // Cuando el usuario hace clic en el mapa, extraemos y guardamos esos números en el formulario
     const handleMapClick = (pos) => {
         setMapPosition(pos);
         setFormData({
@@ -133,14 +142,17 @@ const VistaCajeros = () => {
         });
     };
 
+    // Envía los datos al servidor para Guardar o Editar
     const handleSubmit = async (e) => {
         e.preventDefault();
 
+        // Validación: Obligamos a que marquen el mapa, un cajero no puede existir "en el aire"
         if (!formData.latitud || !formData.longitud || formData.latitud === '') {
             return showError("Por favor, haga clic en el mapa para marcar la ubicación.");
         }
 
         try {
+            // Decidimos la ruta y el método HTTP dependiendo de si estamos Editando o Creando
             const url = isEditing ? `/api/admin/cajeros/actualizar/${formData.idCajero}` : '/api/admin/cajeros/registrar';
             const method = isEditing ? 'PUT' : 'POST';
 
@@ -158,16 +170,18 @@ const VistaCajeros = () => {
 
             setShowModal(false);
             setFormData(initialFormState);
-            cargarCajeros();
+            cargarCajeros(); // Recargamos la tabla para ver los cambios
         } catch (error) {
             showError(error.message);
         }
     };
 
+    // Switch de estado: Manda una orden para pasar a MANTENIMIENTO o volver a ACTIVO
     const toggleEstado = async (idCajero, estadoActual, codigoCajero) => {
         const esActivo = estadoActual === 'ACTIVO';
         const nuevoEstado = esActivo ? 'MANTENIMIENTO' : 'ACTIVO';
 
+        // SweetAlert para no apagar un cajero por accidente
         const confirmado = await confirmAction({
             title: esActivo ? '¿Suspender ATM?' : '¿Activar ATM?',
             text: esActivo ? `La terminal ${codigoCajero} dejará de recibir clientes.` : `La terminal ${codigoCajero} volverá a estar en línea.`,
@@ -181,13 +195,13 @@ const VistaCajeros = () => {
             const res = await apiCall(`/api/admin/cajeros/estado/${idCajero}/${nuevoEstado}`, { method: 'POST' });
             if (!res.ok) throw new Error("Error al comunicar el cambio de estado.");
             showSuccess('Estado Actualizado', `La terminal ahora está en <b>${nuevoEstado}</b>.`);
-            cargarCajeros();
+            cargarCajeros(); // Recargar para ver la "bolita" del Switch en el color nuevo
         } catch (error) {
             showError("No se pudo cambiar el estado del cajero.");
         }
     };
 
-
+    // Buscador en tiempo real: Filtra la lista en el frontend sin tener que preguntarle a Java
     const cajerosFiltrados = cajeros.filter(c =>
         c.codigoCajero.toLowerCase().includes(searchTerm.toLowerCase()) ||
         c.ubicacion.toLowerCase().includes(searchTerm.toLowerCase())
@@ -197,6 +211,7 @@ const VistaCajeros = () => {
         <section className="p-4 sm:p-8 font-sans bg-gray-50 min-h-screen antialiased">
             <div className="max-w-7xl mx-auto space-y-6">
 
+                {/* --- HEADER --- */}
                 <header className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 flex flex-col md:flex-row justify-between items-center gap-4">
                     <div className="flex items-center gap-4">
                         <div className="bg-[#004a8e] p-3 rounded-xl shadow-lg"><Server className="text-white" size={28} /></div>
@@ -216,6 +231,7 @@ const VistaCajeros = () => {
                     </div>
                 </header>
 
+                {/* --- BARRA DE BUSQUEDA --- */}
                 <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
                     <div className="relative max-w-md">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
@@ -223,6 +239,7 @@ const VistaCajeros = () => {
                     </div>
                 </div>
 
+                {/* --- TABLA DE CAJEROS --- */}
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                     <table className="w-full text-left border-collapse">
                         <thead className="bg-gray-50 border-b border-gray-100">
@@ -267,6 +284,7 @@ const VistaCajeros = () => {
                                             <button onClick={() => openEditModal(cajero)} className="p-1.5 text-blue-600 bg-blue-50 hover:bg-blue-600 hover:text-white rounded-md transition-all shadow-sm" title="Editar Cajero">
                                                 <Edit2 size={16} />
                                             </button>
+                                            {/* El Switch visual para cambiar estado */}
                                             <button
                                                 onClick={() => toggleEstado(cajero.idCajero, cajero.estado, cajero.codigoCajero)}
                                                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[#004a8e] focus:ring-offset-1 ${cajero.estado === 'ACTIVO' ? 'bg-green-500' : 'bg-gray-300'}`}
@@ -282,6 +300,7 @@ const VistaCajeros = () => {
                 </div>
             </div>
 
+            {/* --- MODAL DEL MAPA GLOBAL --- */}
             {showNetworkMap && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#1B263B]/90 backdrop-blur-sm p-4 sm:p-8 animate-in fade-in duration-200">
                     <div className="bg-white w-full h-full max-w-7xl rounded-2xl shadow-2xl flex flex-col overflow-hidden relative">
@@ -302,6 +321,7 @@ const VistaCajeros = () => {
                                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                                     attribution='&copy; OpenStreetMap'
                                 />
+                                {/* Mapeamos TODOS los cajeros que tengan coordenadas en este mapa */}
                                 {cajeros.filter(c => c.latitud && c.longitud).map((cajero) => (
                                     <Marker key={cajero.idCajero} position={[parseFloat(cajero.latitud), parseFloat(cajero.longitud)]}>
                                         <Popup>
@@ -321,8 +341,10 @@ const VistaCajeros = () => {
                 </div>
             )}
 
+            {/* --- MODAL PARA CREAR/EDITAR CAJERO --- */}
             {showModal && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#1B263B]/60 backdrop-blur-sm">
+                    {/* El modal cambia de ancho si expandes el mapa para usarlo a pantalla completa */}
                     <div className={`bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col md:flex-row animate-in zoom-in-95 duration-200 transition-all ${isMapExpanded ? 'w-full h-full max-w-none' : 'w-full max-w-5xl'}`}>
                         <div className={`w-full md:w-5/12 p-6 flex flex-col bg-gray-50 border-r border-gray-100 ${isMapExpanded ? 'hidden' : 'flex'}`}>
                             <div className="flex justify-between items-center mb-6">
@@ -336,6 +358,7 @@ const VistaCajeros = () => {
                                     <X size={20} />
                                 </button>
                             </div>
+
                             <form onSubmit={handleSubmit} className="flex-1 space-y-4">
                                 <div><label className="block text-xs font-bold text-gray-600 uppercase mb-1">Código Identificador</label><input type="text" name="codigoCajero" required disabled={isEditing} value={formData.codigoCajero} onChange={handleChange} className={`w-full px-4 py-2.5 border border-gray-200 rounded-xl outline-none transition-all ${isEditing ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : 'bg-white focus:border-[#f5d000] focus:ring-2 focus:ring-[#f5d000]/20'}`} /></div>
                                 <div><label className="block text-xs font-bold text-gray-600 uppercase mb-1">Ubicación Física</label><input type="text" name="ubicacion" required value={formData.ubicacion} onChange={handleChange} className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl outline-none focus:border-[#f5d000] focus:ring-2 focus:ring-[#f5d000]/20 transition-all" /></div>
@@ -352,17 +375,22 @@ const VistaCajeros = () => {
                                 </div>
                             </form>
                         </div>
+
+                        {/* MAPA DENTRO DEL FORMULARIO PARA ELEGIR LA UBICACIÓN */}
                         <div className={`relative bg-gray-200 ${isMapExpanded ? 'w-full h-full' : 'w-full md:w-7/12 min-h-[450px]'}`}>
                             {!isMapExpanded && (
                                 <button onClick={() => setShowModal(false)} className="hidden md:flex absolute top-4 right-4 z-[400] bg-white text-gray-500 hover:text-red-500 hover:bg-red-50 rounded-full p-2 shadow-lg transition-colors items-center justify-center"><X size={20} /></button>
                             )}
+
                             <button type="button" onClick={(e) => { e.preventDefault(); setIsMapExpanded(!isMapExpanded); }} className="absolute top-4 left-4 z-[400] bg-white/90 backdrop-blur px-4 py-2 rounded-xl shadow-lg border border-blue-200 flex items-center gap-2 text-xs font-bold text-[#004a8e] hover:bg-blue-50 transition-colors cursor-pointer">
                                 {isMapExpanded ? <Minimize size={16} /> : <Maximize size={16} />}
                                 {isMapExpanded ? 'Minimizar Mapa' : 'Pantalla Completa'}
                             </button>
+
                             <div className="absolute bottom-6 left-4 z-[400] bg-white/90 backdrop-blur px-3 py-1.5 rounded-lg shadow-md border border-blue-100 pointer-events-none">
                                 <p className="text-xs font-bold text-[#004a8e] flex items-center gap-1"><MapPin size={14} className="text-[#f5d000]"/> Haz clic para ubicar</p>
                             </div>
+
                             {isMapExpanded && (
                                 <div className="absolute bottom-6 right-6 z-[400]">
                                     <button type="button" onClick={(e) => { e.preventDefault(); setIsMapExpanded(false); }} className="bg-[#004a8e] text-white px-6 py-3 rounded-xl font-black shadow-xl hover:bg-[#003566] transition-all flex items-center gap-2 border-2 border-white/20">
@@ -370,6 +398,7 @@ const VistaCajeros = () => {
                                     </button>
                                 </div>
                             )}
+
                             <MapContainer center={mapPosition || defaultCenter} zoom={14} style={{ height: '100%', width: '100%', zIndex: 10 }}>
                                 <MapResizer isExpanded={isMapExpanded} />
                                 <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OpenStreetMap' />

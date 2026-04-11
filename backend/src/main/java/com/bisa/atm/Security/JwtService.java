@@ -17,41 +17,42 @@ import java.util.function.Function;
 @Service
 public class JwtService {
 
-    // lee la contraseña que esta guardada
+    // Extrae la firma ultrasecreta desde nuestro application.properties (.env)
     @Value("${JWT_SECRET}")
     private String secretKey;
 
-    //crea un nuevo token y le da el rol, usuario y le da tambien un tiempo valido
+    // Fabrica un nuevo token, le estampa el Rol del usuario y le da 2 horas exactas de vida
     public String generarToken(UserDetails userDetails) {
         Map<String, Object> claims = new HashMap<>();
         String rolUsuario = userDetails.getAuthorities().iterator().next().getAuthority();
-        claims.put("role", rolUsuario);
+        claims.put("role", rolUsuario); // Guardamos el rol dentro del token para leerlo en React si hace falta
+
         return Jwts.builder()
                 .setClaims(claims)
                 .setSubject(userDetails.getUsername())
                 .setIssuedAt(new Date(System.currentTimeMillis()))
-                .setExpiration(new Date(System.currentTimeMillis() + 1000 * 60 * 60 * 2)) // Expira en 2 horas
+                .setExpiration(new Date(System.currentTimeMillis() + 1000 * 60 * 60 * 2)) // 2 Horas
                 .signWith(obtenerFirmaSegura(), SignatureAlgorithm.HS256)
                 .compact();
     }
 
-    // va extraer el nombre de usuario que viene encriptado en el token
+    // Abre el sobre del token y saca el nombre de usuario (Subject)
     public String extraerNombreUsuario(String token) {
         return extraerClaim(token, Claims::getSubject);
     }
 
-    // que el token sea de quien dice ser y que no haya caducado el tiempo
+    // Validación doble: Que el token sea de quien dice ser y que no haya caducado el tiempo
     public boolean esTokenValido(String token, UserDetails userDetails) {
         final String nombreUsuario = extraerNombreUsuario(token);
         return (nombreUsuario.equals(userDetails.getUsername()) && !esTokenExpirado(token));
     }
 
-    //nomas verifica si el token expiro o nel
+    // Revisa la fecha del token contra la hora actual del servidor
     private boolean esTokenExpirado(String token) {
         return extraerClaim(token, Claims::getExpiration).before(new Date());
     }
 
-    // este metodo es el que se encarga de extraer cualquier claim del token y leerlo para validarlo
+    // Motor principal: Desencripta el token usando nuestra firma secreta y devuelve el dato (Claim) que le pidamos
     private <T> T extraerClaim(String token, Function<Claims, T> claimsResolver) {
         final Claims claims = Jwts.parserBuilder()
                 .setSigningKey(obtenerFirmaSegura())
@@ -61,7 +62,7 @@ public class JwtService {
         return claimsResolver.apply(claims);
     }
 
-    //transforma el string de la contraseña en un formato que se pueda usar para firmar el token
+    // Transforma nuestro string secreto en una llave matemática válida para el algoritmo HS256
     private Key obtenerFirmaSegura() {
         byte[] keyBytes = secretKey.getBytes(java.nio.charset.StandardCharsets.UTF_8);
         return Keys.hmacShaKeyFor(keyBytes);

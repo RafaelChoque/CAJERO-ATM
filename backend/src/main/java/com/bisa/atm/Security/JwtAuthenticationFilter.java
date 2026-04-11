@@ -24,7 +24,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     @Autowired
     private CustomUserDetailsService userDetailsService;
 
-    // detiene la peticion hasta que se valide el token y decide si lo deja pasar
+    // El guardia principal: Intercepta CADA petición HTTP para revisar si trae su "gafete" (Token JWT)
     @Override
     protected void doFilterInternal(
             HttpServletRequest request,
@@ -35,22 +35,23 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         final String jwt;
         final String nombreUsuario;
 
-        // si no hay token o el token no empieza con bearer lo deja pasar sin validar nada para ver si es una ruta publica
+        // Si no trae token o no empieza con "Bearer ", lo dejamos pasar a ver si es una ruta pública (ej: /login)
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
             return;
         }
 
-        // va extraee el token del header y obtiene el nombre de usuario del token
+        // Cortamos la palabra "Bearer " (7 letras) para quedarnos solo con el código encriptado
         jwt = authHeader.substring(7);
         nombreUsuario = jwtService.extraerNombreUsuario(jwt);
 
-        // si esque el token tiene un usuario y no esta autenticado lo valida contra la bd
+        // Si el token tiene dueño y ese dueño aún no ha sido registrado en esta sesión actual de Spring
         if (nombreUsuario != null && SecurityContextHolder.getContext().getAuthentication() == null) {
             UserDetails userDetails = this.userDetailsService.loadUserByUsername(nombreUsuario);
 
-            // aqui si el token es valido y no expiro le da acceso al sistema
+            // Verificamos si el token es genuino y no ha caducado
             if (jwtService.esTokenValido(jwt, userDetails)) {
+                // Le damos luz verde, armamos su sesión oficial y lo guardamos en el contexto de seguridad
                 UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
                         userDetails,
                         null,
@@ -60,6 +61,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 SecurityContextHolder.getContext().setAuthentication(authToken);
             }
         }
+
+        // Continúa la cadena de peticiones hacia el controlador destino
         filterChain.doFilter(request, response);
     }
 }

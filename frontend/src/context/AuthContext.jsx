@@ -48,7 +48,10 @@ export const AuthProvider = ({ children }) => {
         try {
             const response = await fetch(`${API_URL}/api/auth/login-admin`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'ngrok-skip-browser-warning': 'true'
+                },
                 body: JSON.stringify({ nombreUsuario: username, contrasena: password })
             });
 
@@ -97,6 +100,7 @@ export const AuthProvider = ({ children }) => {
 
         const headers = {
             'Content-Type': 'application/json',
+            'ngrok-skip-browser-warning': 'true',
             ...options.headers,
         };
 

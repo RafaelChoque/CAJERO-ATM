@@ -25,21 +25,21 @@ L.Icon.Default.mergeOptions({
     shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
 
-// Componente hijo encargado exclusivamente de encender la cámara y leer el QR
+
 const CustomQrScanner = ({ onScanSuccess }) => {
     useEffect(() => {
         const scanner = new Html5QrcodeScanner(
             "reader",
             { fps: 10, qrbox: { width: 250, height: 250 } },
-            false // false = sin logs feos en la consola
+            false
         );
 
         scanner.render(
             (decodedText) => {
-                scanner.clear(); // Apaga la cámara apenas lee algo
+                scanner.clear();
                 onScanSuccess(decodedText);
             },
-            (error) => {} // Ignoramos los errores constantes mientras busca el QR
+            (error) => {}
         );
 
         return () => {
@@ -52,10 +52,8 @@ const CustomQrScanner = ({ onScanSuccess }) => {
 
 const MobileDashboard = () => {
     const navigate = useNavigate();
-    // Extraemos las funciones de nuestro contexto Inteligente
     const { apiCall, cerrarSesionCliente } = useAuth();
 
-    // Vistas principales: 'home' (Inicio), 'mapa' (ATMs Cercanos) y 'scanner' (Cámara QR)
     const [view, setView] = useState('home');
     const [clienteAuth, setClienteAuth] = useState(null);
     const [scannedCode, setScannedCode] = useState('');
@@ -66,38 +64,32 @@ const MobileDashboard = () => {
     const [cajerosUbicaciones, setCajerosUbicaciones] = useState([]);
     const [transacciones, setTransacciones] = useState([]);
 
-    // 1. Al cargar la app, revisamos si el cliente tiene datos guardados
     useEffect(() => {
         const dataStr = localStorage.getItem('cliente_auth');
         if (dataStr) {
             const cliente = JSON.parse(dataStr);
             setClienteAuth(cliente);
             cargarTransacciones(cliente.idCuenta);
-            cargarCajerosMapa(); // 🚀 RESTAURADO: Cargamos los cajeros desde el principio
+            cargarCajerosMapa();
         }
     }, []);
 
-    // 2. EL "OÍDO" DEL CELULAR: Escucha el canal de seguridad en tiempo real
     useEffect(() => {
         if (!clienteAuth) return;
 
-        // Conexión dinámica (funciona en localhost y en ngrok)
         const wsUrl = window.location.origin + '/ws-atm';
         const socket = new SockJS(wsUrl);
         const stompClient = Stomp.over(socket);
 
-        stompClient.debug = null; // Mantenemos la consola limpia
+        stompClient.debug = null;
 
         stompClient.connect({}, () => {
-            // Se suscribe a su canal personal usando su ID de cuenta
             stompClient.subscribe(`/topic/seguridad/${clienteAuth.idCuenta}`, (mensaje) => {
                 const data = JSON.parse(mensaje.body);
 
-                // Si Java dispara el "Kill Switch" (CERRAR_SESION)
                 if (data.accion === 'CERRAR_SESION') {
                     stompClient.disconnect();
                     showError("Bloqueo de Seguridad", data.motivo);
-                    // 🚀 MEJORA: Usamos la función del contexto para limpiar todo correctamente
                     cerrarSesionCliente();
                 }
             });
@@ -105,13 +97,11 @@ const MobileDashboard = () => {
             console.error("No se pudo conectar al canal de seguridad.", err);
         });
 
-        // Limpieza: Si el cliente cierra la app, nos desconectamos del WebSocket
         return () => {
             if (stompClient.connected) stompClient.disconnect();
         };
     }, [clienteAuth, cerrarSesionCliente]);
 
-    // Trae las coordenadas de los cajeros que están "ACTIVOS"
     const cargarCajerosMapa = async () => {
         try {
             const res = await apiCall(`/api/auth/cajeros-cercanos`);
@@ -121,7 +111,6 @@ const MobileDashboard = () => {
         }
     };
 
-    // Trae el recibo de las transacciones (ej: Retiros en ATM)
     const cargarTransacciones = async (idCuenta) => {
         try {
             const res = await apiCall(`/api/auth/movimientos/${idCuenta}`);
@@ -132,7 +121,6 @@ const MobileDashboard = () => {
         }
     };
 
-    // Botón de sincronizar: Refresca el saldo y los movimientos manualmente
     const handleRefresh = () => {
         if (clienteAuth) {
             cargarTransacciones(clienteAuth.idCuenta);
@@ -140,7 +128,6 @@ const MobileDashboard = () => {
         }
     };
 
-    // Salida voluntaria de la aplicación
     const handleLogout = async () => {
         const confirmar = await confirmAction({
             title: '¿Cerrar Sesión?',
@@ -149,12 +136,10 @@ const MobileDashboard = () => {
         });
 
         if (confirmar) {
-             // 🚀 MEJORA: Usamos la función del contexto
              cerrarSesionCliente();
         }
     };
 
-    // El núcleo del Cardless: Envía el código al backend para que el Cajero despierte
     const procesarVinculacion = async (codigo) => {
         if (!codigo || cargando) return;
 
@@ -199,10 +184,12 @@ const MobileDashboard = () => {
 
     if (!clienteAuth) return null;
 
+    // Número de cuenta estético (Truco visual)
     const cuentaOculta = `400012${clienteAuth.idCuenta.toString().padStart(4, '0')}`;
 
     return (
         <section className="min-h-[100dvh] bg-slate-50 lg:bg-gray-200 lg:flex lg:items-center lg:justify-center lg:p-4 font-sans">
+            {/* CSS inyectado para obligar a la cámara a verse bonita y sin bordes blancos */}
             <style>{`
                 #reader { border: none !important; }
                 #reader__dashboard_section_csr span,
@@ -217,9 +204,11 @@ const MobileDashboard = () => {
             <div className="w-full h-[100dvh] lg:w-[360px] lg:h-[700px] bg-slate-50 lg:rounded-[3rem] lg:shadow-2xl relative overflow-hidden lg:border-[8px] lg:border-slate-800 flex flex-col">
                 <div className="hidden lg:block absolute top-0 inset-x-0 h-6 bg-slate-800 rounded-b-3xl w-40 mx-auto z-50"></div>
 
+                {/* --- VISTA: INICIO --- */}
                 {view === 'home' && (
                     <div className="flex-1 flex flex-col animate-in fade-in duration-300 overflow-y-auto pb-20">
 
+                        {/* Tarjeta de Saldo */}
                         <div className="bg-white px-5 pt-12 pb-6 relative">
                             <div className="flex justify-between items-center mb-6">
                                 <div><h1 className="text-xl font-black text-slate-800 tracking-tight">Mi Producto</h1></div>
@@ -257,6 +246,7 @@ const MobileDashboard = () => {
                             </div>
                         </div>
 
+                        {/* Accesos Rápidos */}
                         <div className="px-5 py-2">
                             <div className="flex justify-between gap-2">
                                 <button onClick={() => setView('scanner')} className="flex flex-col items-center gap-2 group flex-1">
@@ -315,6 +305,7 @@ const MobileDashboard = () => {
                             </div>
                         </div>
 
+                        {/* Menú de Navegación Inferior flotante */}
                         <div className="absolute bottom-0 w-full bg-white/90 backdrop-blur-md border-t border-slate-100 flex justify-around items-center py-3 text-slate-400 pb-5 sm:pb-3 rounded-b-[2.5rem] z-50">
                             <button className="flex flex-col items-center text-[#004a8e]"><Home size={24} className="mb-1" /><span className="text-[10px] font-bold">Inicio</span></button>
                             <button onClick={() => setView('scanner')} className="relative -top-5 w-14 h-14 bg-[#004a8e] text-[#f5d000] rounded-full shadow-[0_8px_15px_rgba(0,74,142,0.3)] flex items-center justify-center border-4 border-slate-50 active:scale-95 transition-transform"><QrCode size={26} /></button>
@@ -323,6 +314,7 @@ const MobileDashboard = () => {
                     </div>
                 )}
 
+                {/* --- VISTA: MAPA --- */}
                 {view === 'mapa' && (
                     <div className="flex-1 bg-slate-100 flex flex-col relative animate-in slide-in-from-right duration-300">
                         <div className="absolute top-0 w-full z-[400] pt-12 px-4 flex items-center justify-between pointer-events-none">
@@ -343,6 +335,7 @@ const MobileDashboard = () => {
                     </div>
                 )}
 
+                {/* --- VISTA: SCANNER QR --- */}
                 {view === 'scanner' && (
                     <div className="flex-1 bg-slate-900 flex flex-col animate-in slide-in-from-bottom duration-300 relative overflow-hidden">
                         <div className="pt-12 px-4 flex items-center justify-between text-white mb-6 relative z-10">
@@ -353,10 +346,12 @@ const MobileDashboard = () => {
 
                         <div className="flex-1 flex flex-col items-center px-4 relative z-10 w-full">
 
+                            {/* Cámara y Marco de escaneo */}
                             <div className="w-full max-w-[280px] aspect-square rounded-[2rem] overflow-hidden border-4 border-[#f5d000] shadow-[0_0_30px_rgba(245,208,0,0.3)] bg-black relative mb-6 flex justify-center items-center">
 
                                 <CustomQrScanner onScanSuccess={extraerCodigo} />
 
+                                {/* Efectos visuales sci-fi para el lector */}
                                 <div className="absolute inset-0 pointer-events-none z-20">
                                     <div className="absolute top-4 left-4 w-8 h-8 border-t-4 border-l-4 border-white/80 rounded-tl-xl"></div>
                                     <div className="absolute top-4 right-4 w-8 h-8 border-t-4 border-r-4 border-white/80 rounded-tr-xl"></div>
@@ -368,6 +363,7 @@ const MobileDashboard = () => {
 
                             <p className="text-blue-100 text-center text-sm font-medium px-4 mb-6">Apunta al QR del Cajero Automático.</p>
 
+                            {/* Opción Manual (Respaldos por si la cámara falla) */}
                             <button onClick={() => setMostrarIngresoManual(!mostrarIngresoManual)} className="text-blue-300 text-xs font-bold uppercase tracking-widest flex items-center gap-2 hover:text-white transition-colors"><Keyboard size={16} />{mostrarIngresoManual ? 'Ocultar Teclado' : 'Ingresar manualmente'}</button>
                             {mostrarIngresoManual && (
                                 <form onSubmit={handleVincularManual} className="w-full max-w-xs mt-4 animate-in slide-in-from-top-4">

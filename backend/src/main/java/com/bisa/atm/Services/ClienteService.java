@@ -32,7 +32,7 @@ public class ClienteService {
     @Autowired
     private TransaccionRepository transaccionRepository;
 
-    // devuelve a todos los clientes activos o inactivos,
+    // Trae la lista de clientes para el panel, ocultando a los dados de baja
     public List<ClienteDto> obtenerTodosLosClientes() {
         List<Usuario> usuarios = usuarioRepository.findByRol("CLIENTE");
 
@@ -53,7 +53,7 @@ public class ClienteService {
                 }).collect(Collectors.toList());
     }
 
-    //Recibo los datos del dto y crea un nuevo cliente ademas de crear su cuenta bancaria, tarjeta virtual y registrar el movimiento inicial
+    // El núcleo del onboarding: Crea Persona, Usuario, Cuenta, Tarjeta y le da su saldo inicial de golpe
     @Transactional
     public void registrarNuevoCliente(ClienteRegistroDto dto) {
         Persona persona = new Persona(
@@ -68,21 +68,21 @@ public class ClienteService {
         );
         usuario = usuarioRepository.save(usuario);
 
-        //genera un numero de cuenta aleatorio bancario empezando con 400
+        // Genera un número de cuenta aleatorio bancario empezando con "400"
         String numeroCuentaGen = "400" + (1000000 + new Random().nextInt(9000000));
         CuentaBancaria cuenta = new CuentaBancaria(numeroCuentaGen, dto.getSaldoInicial(), usuario);
         cuenta = cuentaRepository.save(cuenta);
 
-        //genera la tarjeta virtual  usando los 4 ultimos digitos del carnet del cliente
+        // Genera la tarjeta virtual usando los últimos 4 dígitos del carnet del cliente
         String ultimos4 = dto.getCi().length() >= 4 ? dto.getCi().substring(dto.getCi().length() - 4) : "0000";
         TarjetaVirtual tarjeta = new TarjetaVirtual(ultimos4, dto.getPinCajero(), cuenta);
         tarjetaRepository.save(tarjeta);
 
-        // registro del movimiento inicial
+        // REGISTRO DEL MOVIMIENTO INICIAL (Si el administrador le puso platita al crearlo)
         if (dto.getSaldoInicial() != null && dto.getSaldoInicial().compareTo(BigDecimal.ZERO) > 0) {
             Transaccion depositoInicial = new Transaccion(
                     cuenta,
-                    null,
+                    null, // Cajero nulo porque se hizo directo en plataforma BISA
                     dto.getSaldoInicial(),
                     "DEPÓSITO INICIAL",
                     dto.getSaldoInicial()
@@ -90,10 +90,11 @@ public class ClienteService {
             transaccionRepository.save(depositoInicial);
         }
 
+        // Le avisamos al cliente por correo que ya puede entrar
         emailService.enviarCorreoBienvenida(dto.getCorreoElectronico(), dto.getCi(), dto.getCi());
     }
 
-    //busca al cliente por su id si no lo encuentra lanza una excepcion y si lo encuentra actualiza sus datos de contacto
+    // Actualiza netamente la info de contacto (Persona), no toca credenciales de seguridad (Usuario)
     @Transactional
     public void actualizarCliente(Long idUsuario, ClienteEditarDto dto) {
         Usuario usuario = usuarioRepository.findById(idUsuario)
@@ -105,7 +106,7 @@ public class ClienteService {
         personaRepository.save(usuario.getPersona());
     }
 
-    // cambia el estado del cliente dependiendo de la accion del admin
+    // Congela o descongela a un cliente manualmente desde el panel de administrador
     @Transactional
     public void cambiarEstadoCliente(Long idUsuario, String nuevoEstado) {
         Usuario usuario = usuarioRepository.findById(idUsuario)
@@ -114,7 +115,7 @@ public class ClienteService {
         usuarioRepository.save(usuario);
     }
 
-    // borrado logico del cliente no lo borramos de la bd
+    // Lo "elimina" para que no pueda entrar más, pero mantiene sus transacciones históricas intactas
     @Transactional
     public void eliminarClienteLogico(Long idUsuario) {
         Usuario usuario = usuarioRepository.findById(idUsuario)

@@ -22,7 +22,6 @@ const AtmInterface = () => {
     const [error, setError] = useState(null);
     const [cargando, setCargando] = useState(false);
 
-    // 🚀 NUEVOS ESTADOS PARA EL CONTROL DEL PIN EN PANTALLA
     const [pinError, setPinError] = useState(null);
     const [pinAttempts, setPinAttempts] = useState(0);
 
@@ -119,7 +118,7 @@ const AtmInterface = () => {
     const addNumber = (num) => {
         if (pin.length < 4) {
             setPin(prev => prev + num);
-            setPinError(null); // Limpiamos el error visual apenas empiece a escribir de nuevo
+            setPinError(null);
         }
     };
 
@@ -138,25 +137,22 @@ const AtmInterface = () => {
             });
 
             if (response.ok) {
-                setPinAttempts(0); // Reseteamos los intentos si entra
+                setPinAttempts(0);
                 setStep('main_menu');
             } else {
                 const data = await response.json();
                 setPin('');
 
-                // Si el backend avisa que ya estaba bloqueado o inactivo, lo sacamos de una vez
                 if (data.mensaje && (data.mensaje.includes("bloqueada") || data.mensaje.includes("inactiva"))) {
                     showError("Operación Denegada", data.mensaje);
                     reiniciarCajero();
                     return;
                 }
 
-                // Lógica de los 3 intentos en el frontend
                 const intentosActuales = pinAttempts + 1;
 
                 if (intentosActuales >= 3) {
                     showError("Seguridad BISA", "Has ingresado un PIN incorrecto 3 veces. Por seguridad, la operación ha sido cancelada.");
-                    // NOTA: Para un bloqueo absoluto, aquí también se debería avisar al backend.
                     reiniciarCajero();
                 } else {
                     setPinAttempts(intentosActuales);
@@ -194,7 +190,7 @@ const AtmInterface = () => {
                     {step !== 'welcome' && step !== 'setup' && (
                         <div className="px-6 py-4 shrink-0 flex items-center justify-between z-10 relative bg-white">
                             <div className="flex items-center gap-4">
-                                <img src={logoBisa} alt="BISA" className="h-10" onError={(e) => e.target.style.display='none'} />
+                                <img src={logoBisa} alt="BISA" className="h-10" onError={(e) => e.target.style.display = 'none'} />
                                 <span className="text-[#003366] font-black italic text-lg uppercase">Terminal #{cajeroId}</span>
                             </div>
                             {step === 'main_menu' && (
@@ -232,7 +228,7 @@ const AtmInterface = () => {
 
                         {step === 'welcome' && (
                             <div className="absolute inset-0 w-full h-full bg-gradient-to-br from-blue-50/50 to-white flex flex-col items-center justify-center p-12">
-                                <img src={logoBisa} alt="BISA" className="h-28 mb-4 drop-shadow-lg" onError={(e) => e.target.style.display='none'} />
+                                <img src={logoBisa} alt="BISA" className="h-28 mb-4 drop-shadow-lg" onError={(e) => e.target.style.display = 'none'} />
                                 <span className="text-[#003366] font-medium italic text-3xl mb-12">simplificando tu vida</span>
 
                                 {error && (
@@ -282,7 +278,7 @@ const AtmInterface = () => {
 
                         {step === 'qr' && (
                             <div className="w-full h-full flex flex-col items-center justify-center relative animate-in fade-in">
-                                <h2 className="text-3xl font-black text-[#003366] italic mb-6 text-center leading-tight">Escanee este código <br/> con su App BISA Móvil</h2>
+                                <h2 className="text-3xl font-black text-[#003366] italic mb-6 text-center leading-tight">Escanee este código <br /> con su App BISA Móvil</h2>
 
                                 <div className="bg-white p-4 border-4 border-slate-200 rounded-3xl shadow-xl flex flex-col items-center">
                                     {codigoToken ? (
@@ -313,7 +309,6 @@ const AtmInterface = () => {
                             <div className="w-full h-full flex flex-col items-center justify-center relative animate-in slide-in-from-right">
                                 <h2 className="text-3xl font-black text-[#003366] italic mb-6">Introduce el número PIN</h2>
 
-                                {/* 🚀 SECCIÓN DONDE SE MUESTRA EL ERROR EN PANTALLA */}
                                 {pinError && (
                                     <div className="bg-red-100 text-red-600 px-4 py-2 rounded-lg font-bold mb-4 flex items-center gap-2 animate-in fade-in zoom-in">
                                         <AlertCircle size={20} />

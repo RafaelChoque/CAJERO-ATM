@@ -16,7 +16,7 @@ public class CustomUserDetails implements UserDetails {
         this.usuario = usuario;
     }
 
-    //convierte el rol del usuario en un permiso que spring pueda entender
+    // Convierte el rol que guardamos en BD (ej: "CLIENTE") en una credencial oficial que Spring Security entiende
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
         return List.of(new SimpleGrantedAuthority(usuario.getRol()));
@@ -37,7 +37,7 @@ public class CustomUserDetails implements UserDetails {
         return true;
     }
 
-    // verifica si el usuario no esta bloqueado en la bd
+    // Verifica a nivel de seguridad global si el usuario no tiene el castigo de 3 intentos
     @Override
     public boolean isAccountNonLocked() {
         return !usuario.getEstado().equals("BLOQUEADO");
@@ -48,7 +48,7 @@ public class CustomUserDetails implements UserDetails {
         return true;
     }
 
-    // verifica si el usuario esta actibo en la bd xd
+    // Filtro rápido: Si lo eliminaron lógicamente (ELIMINADO) o lo apagaron (INACTIVO), Spring le corta el paso aquí
     @Override
     public boolean isEnabled() {
         return usuario.getEstado().equals("ACTIVO");

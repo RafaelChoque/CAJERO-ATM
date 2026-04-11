@@ -10,7 +10,7 @@ const VistaClientes = () => {
     const [searchTerm, setSearchTerm] = useState('');
 
     const [showModal, setShowModal] = useState(false);
-    const [isEditing, setIsEditing] = useState(false);
+    const [isEditing, setIsEditing] = useState(false); // Define si vamos a crear una cuenta nueva o solo editar el contacto de alguien
 
     const initialFormState = {
         idUsuario: null,
@@ -25,10 +25,11 @@ const VistaClientes = () => {
         cargarClientes();
     }, []);
 
+    // Carga la lista completa de clientes usando el token de administrador
     const cargarClientes = async () => {
         try {
             setCargando(true);
-            const response = await apiCall('/api/admin/clientes/listar');
+            const response = await apiCall('/api/admin/clientes/listar'); // <-- Petición segura
             if (!response.ok) throw new Error("Error al cargar clientes");
             const data = await response.json();
             setClientes(data);
@@ -47,6 +48,7 @@ const VistaClientes = () => {
 
     const openEditModal = (cliente) => {
         setIsEditing(true);
+        // Cuando editamos, solo podemos tocar datos de contacto, NUNCA carnet, fecha de nacimiento o contraseña.
         setFormData({
             idUsuario: cliente.idUsuario,
             nombre: cliente.nombre || '',
@@ -55,19 +57,21 @@ const VistaClientes = () => {
             ci: cliente.ci,
             celular: cliente.celular || '',
             correoElectronico: cliente.correo || '',
-            direccion: '',
+            direccion: '', // La dirección real vive en otra tabla, pero dejamos el campo listo
         });
         setShowModal(true);
     };
 
     const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
+    // Decide si manda todo el paquete completo (Crear) o solo los datos personales (Editar)
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
             const url = isEditing ? `/api/admin/clientes/actualizar/${formData.idUsuario}` : '/api/admin/clientes/registrar';
             const method = isEditing ? 'PUT' : 'POST';
 
+            // Armamos el payload inteligentemente. Si editamos, no mandamos CI ni Saldo inicial
             const payload = isEditing ? {
                 nombre: formData.nombre,
                 apellidoPaterno: formData.apellidoPaterno,
@@ -97,10 +101,12 @@ const VistaClientes = () => {
         }
     };
 
+    // Bloqueo manual: El administrador le quita o devuelve el acceso a la app móvil por completo
     const toggleEstadoSeguridad = async (idUsuario, estadoActual, nombreCliente) => {
         const esActivo = estadoActual === 'ACTIVO';
         const nuevoEstado = esActivo ? 'BLOQUEADO' : 'ACTIVO';
 
+        // SweetAlert para evitar clics accidentales
         const verificado = await confirmAction({
             title: esActivo ? '¿Suspender Acceso?' : '¿Restaurar Acceso?',
             text: esActivo
@@ -116,12 +122,13 @@ const VistaClientes = () => {
             const res = await apiCall(`/api/admin/clientes/estado/${idUsuario}/${nuevoEstado}`, { method: 'POST' });
             if (!res.ok) throw new Error("Error al cambiar el estado de seguridad.");
             showSuccess('Seguridad Actualizada', `El estado ahora es <b>${nuevoEstado}</b>.`);
-            cargarClientes();
+            cargarClientes(); // Recargar para ver los cambios visuales en las etiquetas
         } catch (err) {
             showError("No se pudo cambiar el estado del cliente.");
         }
     };
 
+    // Buscador en frontend: Une nombre, apellidos y CI en una sola línea para que la búsqueda sea "Google-style"
     const filtrados = clientes.filter(c => {
         const nombreArmado = `${c.nombre} ${c.apellidoPaterno} ${c.apellidoMaterno}`.toLowerCase();
         return nombreArmado.includes(searchTerm.toLowerCase()) || c.ci?.includes(searchTerm);
@@ -131,6 +138,7 @@ const VistaClientes = () => {
         <section className="min-h-screen bg-gray-50 p-4 sm:p-8 font-sans antialiased">
             <div className="max-w-7xl mx-auto space-y-6">
 
+                {/* --- HEADER --- */}
                 <header className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 flex flex-col md:flex-row justify-between items-center gap-4">
                     <div className="flex items-center gap-4">
                         <div className="bg-[#004a8e] p-3 rounded-xl shadow-lg"><ShieldCheck className="text-white" size={28} /></div>
@@ -144,6 +152,7 @@ const VistaClientes = () => {
                     </button>
                 </header>
 
+                {/* --- BARRA DE BUSQUEDA --- */}
                 <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
                     <div className="relative max-w-md">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
@@ -151,6 +160,7 @@ const VistaClientes = () => {
                     </div>
                 </div>
 
+                {/* --- TABLA DE CLIENTES --- */}
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                     <div className="overflow-x-auto">
                         <table className="w-full text-left border-collapse">
@@ -202,6 +212,7 @@ const VistaClientes = () => {
                                                 </div>
                                             </td>
 
+                                            {/* ALERTAS INTELIGENTES: Si se equivocó en el PIN, lo pinta de rojo */}
                                             <td className="px-6 py-4 whitespace-nowrap text-center align-middle">
                                                 {cliente.estado === 'BLOQUEADO' ? (
                                                     <span className="inline-flex items-center gap-1.5 bg-gray-100 text-gray-500 px-3 py-1 rounded text-[10px] font-black uppercase border border-gray-200">
@@ -246,6 +257,7 @@ const VistaClientes = () => {
                 </div>
             </div>
 
+            {/* --- MODAL DE REGISTRO / EDICIÓN --- */}
             {showModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#1B263B]/60 backdrop-blur-sm">
                     <div className="bg-white w-full max-w-3xl rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200">
@@ -273,6 +285,7 @@ const VistaClientes = () => {
 
                                 <div><label className="text-xs font-bold text-gray-500">Apellido Materno</label><input type="text" name="apellidoMaterno" required value={formData.apellidoMaterno} onChange={handleChange} className="w-full bg-gray-50 border border-gray-200 rounded-lg p-2.5 outline-none focus:border-[#f5d000] focus:ring-2 focus:ring-[#f5d000]/20 transition-all" /></div>
 
+                                {/* Si estamos EDITANDO, ocultamos Carnet y Fecha de Nacimiento porque esos no deberían cambiar nunca */}
                                 {!isEditing && (
                                     <>
                                         <div><label className="text-xs font-bold text-gray-500">Carnet (CI)</label><input type="text" name="ci" required value={formData.ci} onChange={handleChange} className="w-full bg-gray-50 border border-gray-200 rounded-lg p-2.5 outline-none focus:border-[#f5d000] focus:ring-2 focus:ring-[#f5d000]/20 transition-all font-mono" /></div>
@@ -286,6 +299,7 @@ const VistaClientes = () => {
 
                                 <div className="col-span-1 md:col-span-2"><label className="text-xs font-bold text-gray-500">Dirección</label><input type="text" name="direccion" required value={formData.direccion} onChange={handleChange} className="w-full bg-gray-50 border border-gray-200 rounded-lg p-2.5 outline-none focus:border-[#f5d000] focus:ring-2 focus:ring-[#f5d000]/20 transition-all" /></div>
 
+                                {/* Si estamos CREANDO, pedimos saldo inicial y PIN para la tarjeta */}
                                 {!isEditing && (
                                     <>
                                         <div className="col-span-1 md:col-span-2 mt-4"><h3 className="text-[#004a8e] font-bold border-b pb-2 mb-2">Apertura de Cuenta</h3></div>
