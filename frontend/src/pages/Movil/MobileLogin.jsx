@@ -3,13 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { showError, showSuccess } from '../../utils/alerts';
 import { User, Lock, Eye, EyeOff } from 'lucide-react';
 import logoBisa from '../../assets/logo-bisa.png';
-// 🚀 1. IMPORTAMOS EL CONTEXTO
 import { useAuth } from '../../context/AuthContext';
 
 const MobileLogin = () => {
     const navigate = useNavigate();
 
-    // 🚀 2. SACAMOS LA FUNCIÓN DEL CONTEXTO
     const { iniciarSesionCliente } = useAuth();
 
     const [formData, setFormData] = useState({ username: '', password: '' });
@@ -36,12 +34,10 @@ const MobileLogin = () => {
             if (!response.ok) throw new Error(data.message || "Credenciales inválidas.");
 
             if (data.requiereCambio) {
-                // El cambio temporal se queda en localStorage porque es una vista intermedia
                 localStorage.setItem('temp_userId', data.idUsuario);
                 navigate('/movil/cambiar-password');
             } else {
 
-                // 🚀 3. USAMOS LA FUNCIÓN DEL CONTEXTO EN LUGAR DE LOCALSTORAGE DIRECTO
                 const datosCliente = {
                     idCuenta: data.idCuenta,
                     nombre: data.nombre,
@@ -49,7 +45,6 @@ const MobileLogin = () => {
                     moneda: data.moneda === 'BOB' ? 'Bs.' : '$us.'
                 };
 
-                // Esto le avisa a TODO React que el cliente entró, y guarda los tokens automáticamente
                 iniciarSesionCliente(datosCliente, data.token);
 
                 showSuccess('Acceso Autorizado', `Bienvenido, ${data.nombre}`);
@@ -70,10 +65,10 @@ const MobileLogin = () => {
 
     return (
         <section className="min-h-[100dvh] bg-[#003366] md:bg-gray-200 md:flex md:items-center md:justify-center md:p-4 font-sans">
+            {/* chasis de celular solo en vista de pc */}
             <div className="w-full h-[100dvh] md:w-[360px] md:h-[700px] md:rounded-[3rem] md:border-[8px] md:border-slate-800 md:shadow-2xl bg-gradient-to-b from-[#003366] to-[#001a33] relative overflow-hidden flex flex-col">
-
                 <div className="hidden md:block absolute top-0 inset-x-0 h-6 bg-slate-800 rounded-b-3xl w-40 mx-auto z-50"></div>
-
+                {/* logo  */}
                 <div className="flex-1 flex flex-col items-center justify-center p-8 z-10 w-full max-w-sm mx-auto">
                     <div className="mb-6 w-48 h-20 flex items-center justify-center">
                         <img
@@ -93,7 +88,9 @@ const MobileLogin = () => {
                         <span className="absolute -bottom-3 left-1/2 transform -translate-x-1/2 w-8 h-0.5 bg-[#f5d000] rounded-full"></span>
                     </p>
 
+                    {/* formulario de inicio de sesion */}
                     <form onSubmit={handleSubmit} className="w-full space-y-5">
+                        {/* campo de usrename (ci) */}
                         <div className="space-y-1.5">
                             <label className="text-[10px] text-blue-200 font-bold uppercase ml-2 tracking-wider">CI del Cliente</label>
                             <div className="relative">
@@ -110,6 +107,7 @@ const MobileLogin = () => {
                             </div>
                         </div>
 
+                        {/* campo de contrasena */}
                         <div className="space-y-1.5">
                             <label className="text-[10px] text-blue-200 font-bold uppercase ml-2 tracking-wider">Contraseña</label>
                             <div className="relative">
@@ -132,7 +130,7 @@ const MobileLogin = () => {
                                 </button>
                             </div>
                         </div>
-
+                        {/* btn principal de ingreso */}
                         <button
                             type="submit"
                             disabled={cargando}
@@ -146,7 +144,6 @@ const MobileLogin = () => {
                         </button>
                     </form>
                 </div>
-                <div className="hidden md:block h-1 bg-white/20 w-32 mx-auto rounded-full mb-4 shrink-0"></div>
             </div>
         </section>
     );

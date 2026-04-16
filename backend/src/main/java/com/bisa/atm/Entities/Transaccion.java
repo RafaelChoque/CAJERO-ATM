@@ -17,7 +17,7 @@ public class Transaccion {
     @Column(unique = true, nullable = false, updatable = false)
     private String numeroReferencia;
 
-    @Column(nullable = false, length = 20)
+    @Column(nullable = false, length = 50)
     private String tipoTransaccion;
 
     @Column(nullable = false)

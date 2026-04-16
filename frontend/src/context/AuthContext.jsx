@@ -99,10 +99,13 @@ export const AuthProvider = ({ children }) => {
         const tokenUsar = token || tokenCliente;
 
         const headers = {
-            'Content-Type': 'application/json',
             'ngrok-skip-browser-warning': 'true',
             ...options.headers,
         };
+
+        if (!(options.body instanceof FormData)) {
+            headers['Content-Type'] = 'application/json';
+        }
 
         if (tokenUsar) {
             headers['Authorization'] = `Bearer ${tokenUsar}`;
@@ -116,17 +119,15 @@ export const AuthProvider = ({ children }) => {
                 headers
             });
 
-            if (response.status === 401 || response.status === 403) {
+            if (response.status === 401) {
                 if (location.pathname.includes('/movil')) {
                     cerrarSesionCliente();
                     throw new Error('Tu sesión ha expirado por seguridad. Vuelve a ingresar.');
-                }
-                else if (location.pathname !== '/') {
+                } else if (location.pathname !== '/') {
                     logout();
                     throw new Error('Sesión de administrador expirada.');
                 }
             }
-
             return response;
         } catch (error) {
             throw error;

@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Delete, AlertCircle, RefreshCw, Lock, ArrowLeft, ChevronRight, Wallet, Receipt, DollarSign, Settings } from 'lucide-react';
+import { Delete, AlertCircle, RefreshCw, Lock, ArrowLeft, ChevronRight, Wallet, Receipt, DollarSign, Settings, Camera } from 'lucide-react';
 import QRCode from 'react-qr-code';
 import { useAuth } from '../../context/AuthContext';
 import logoBisa from '../../assets/logo-bisa.png';
 import { showError } from '../../utils/alerts';
+import DetectorBilletes from '../../components/DetectorBilletes';
 
 import SockJS from 'sockjs-client';
 import Stomp from 'stompjs';
@@ -27,6 +28,10 @@ const AtmInterface = () => {
 
     const stompClientRef = useRef(null);
     const timerInterval = useRef(null);
+
+    const [retiroMonto, setRetiroMonto] = useState('');
+    const [retiroError, setRetiroError] = useState(null);
+    const [retiroResultado, setRetiroResultado] = useState(null);
 
     useEffect(() => {
         return () => detenerTodo();
@@ -71,7 +76,7 @@ const AtmInterface = () => {
         stompClient.debug = null;
 
         stompClient.connect({}, () => {
-            console.log("📡 Conectado al satélite BISA");
+            console.log("Conectado");
             stompClientRef.current = stompClient;
 
             stompClient.subscribe(`/topic/qr/${codigoActual}`, (mensaje) => {
@@ -182,11 +187,118 @@ const AtmInterface = () => {
         alert(`Operación: ${operacion}\nID Cuenta: ${idCuenta}\nID Cajero: ${cajeroId}`);
     };
 
+    const abrirRetiro = () => {
+        setRetiroMonto('');
+        setRetiroError(null);
+        setRetiroResultado(null);
+        setStep('withdraw_amount');
+    };
+
+    const agregarDigitoRetiro = (digito) => {
+        setRetiroError(null);
+        setRetiroMonto(prev => {
+            const nuevo = `${prev}${digito}`;
+            return nuevo.length > 5 ? prev : nuevo;
+        });
+    };
+
+    const borrarRetiro = () => {
+        setRetiroMonto(prev => prev.slice(0, -1));
+    };
+
+    const solicitarRetiro = async () => {
+        if (!retiroMonto || Number(retiroMonto) <= 0) {
+            setRetiroError('Ingrese un monto válido');
+            return;
+        }
+
+        setCargando(true);
+        setRetiroError(null);
+
+        try {
+            const response = await apiCall('/api/qr/retiros/reservar', {
+                method: 'POST',
+                body: JSON.stringify({
+                    idCuenta: idCuenta,
+                    idCajero: Number(cajeroId),
+                    monto: Number(retiroMonto)
+                })
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.message || 'No se pudo preparar el retiro');
+            }
+
+            setRetiroResultado(data);
+            setStep('withdraw_preview');
+        } catch (err) {
+            setRetiroError(err.message || 'No se pudo preparar el retiro');
+        } finally {
+            setCargando(false);
+        }
+    };
+
+    const confirmarRetiro = async () => {
+        if (!retiroResultado) return;
+
+        setCargando(true);
+        try {
+            const response = await apiCall(`/api/qr/retiros/confirmar?idCuenta=${idCuenta}`, {
+                method: 'POST',
+                body: JSON.stringify(retiroResultado)
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.message || 'No se pudo confirmar el retiro');
+            }
+
+            setStep('withdraw_success');
+        } catch (err) {
+            setRetiroError(err.message || 'No se pudo confirmar el retiro');
+        } finally {
+            setCargando(false);
+        }
+    };
+
+    const cancelarRetiro = async () => {
+        if (!retiroResultado) {
+            setStep('main_menu');
+            return;
+        }
+
+        setCargando(true);
+        try {
+            await apiCall('/api/qr/retiros/cancelar', {
+                method: 'POST',
+                body: JSON.stringify(retiroResultado)
+            });
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setCargando(false);
+            setRetiroMonto('');
+            setRetiroResultado(null);
+            setRetiroError(null);
+            setStep('main_menu');
+        }
+    };
+
+    const volverAlMenuTrasRetiro = () => {
+        setRetiroMonto('');
+        setRetiroError(null);
+        setRetiroResultado(null);
+        setStep('main_menu');
+    };
+
     return (
         <div className="h-screen w-screen bg-[#d9e2ec] flex items-center justify-center font-sans overflow-hidden select-none">
             <div className="w-[1024px] h-[768px] bg-[#c0c9d4] rounded-3xl border-[16px] border-[#a5b1c2] shadow-[inset_0_0_50px_rgba(0,0,0,0.2),0_20px_50px_rgba(0,0,0,0.5)] flex flex-col items-center justify-center relative p-12">
                 <div className="w-full h-full bg-white rounded-xl border-8 border-[#2d3436] shadow-[inset_0_0_20px_rgba(0,0,0,0.1)] overflow-hidden relative flex flex-col text-slate-800">
-
+                     {/* encabezado de pantalla  */}
                     {step !== 'welcome' && step !== 'setup' && (
                         <div className="px-6 py-4 shrink-0 flex items-center justify-between z-10 relative bg-white">
                             <div className="flex items-center gap-4">
@@ -203,7 +315,7 @@ const AtmInterface = () => {
 
                     <main className="flex-1 flex flex-col items-center justify-center p-8 relative">
                         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-blue-50 rounded-full blur-3xl -z-10 pointer-events-none"></div>
-
+                        {/* configuracion inicial del atm (cuando se ingresa por primera vez)*/}
                         {step === 'setup' && (
                             <div className="absolute inset-0 w-full h-full bg-[#001a33] flex flex-col items-center justify-center p-12 z-50">
                                 <Settings size={60} className="text-[#f5d000] mb-6 animate-pulse" />
@@ -225,7 +337,7 @@ const AtmInterface = () => {
                                 </form>
                             </div>
                         )}
-
+                        {/* bienvenida al cliente */}
                         {step === 'welcome' && (
                             <div className="absolute inset-0 w-full h-full bg-gradient-to-br from-blue-50/50 to-white flex flex-col items-center justify-center p-12">
                                 <img src={logoBisa} alt="BISA" className="h-28 mb-4 drop-shadow-lg" onError={(e) => e.target.style.display = 'none'} />
@@ -247,7 +359,7 @@ const AtmInterface = () => {
                                 </div>
                             </div>
                         )}
-
+                        {/* seleccion de metodo cardless*/}
                         {step === 'options' && (
                             <div className="w-full h-full flex flex-col items-center justify-center relative animate-in fade-in">
                                 <h2 className="text-4xl font-black text-[#003366] italic mb-12 tracking-tight">Selecciona la operación</h2>
@@ -275,7 +387,7 @@ const AtmInterface = () => {
                                 </div>
                             </div>
                         )}
-
+                        {/* renderizado del codigo QR para la app movil */}
                         {step === 'qr' && (
                             <div className="w-full h-full flex flex-col items-center justify-center relative animate-in fade-in">
                                 <h2 className="text-3xl font-black text-[#003366] italic mb-6 text-center leading-tight">Escanee este código <br /> con su App BISA Móvil</h2>
@@ -304,7 +416,7 @@ const AtmInterface = () => {
                                 </div>
                             </div>
                         )}
-
+                        {/* validacion de pin numerico teclado*/}
                         {step === 'pin' && (
                             <div className="w-full h-full flex flex-col items-center justify-center relative animate-in slide-in-from-right">
                                 <h2 className="text-3xl font-black text-[#003366] italic mb-6">Introduce el número PIN</h2>
@@ -356,21 +468,21 @@ const AtmInterface = () => {
                                 </div>
                             </div>
                         )}
-
+                        {/* pantalla principal tras autenticarse */}
                         {step === 'main_menu' && (
                             <div className="w-full h-full flex flex-col items-center justify-center animate-in zoom-in-95">
                                 <h2 className="text-3xl font-black text-[#003366] italic mb-2 text-center">¿Qué transacción deseas realizar?</h2>
                                 <p className="text-lg text-slate-500 font-semibold mb-8">Sesión segura iniciada mediante BISA Móvil</p>
 
                                 <div className="grid grid-cols-2 gap-6 w-full max-w-4xl px-8">
-                                    <button onClick={() => mostrarOpcionEnDesarrollo('Retiro de Efectivo')} className="bg-white border-4 border-slate-200 hover:border-[#003366] h-32 rounded-2xl shadow-md flex flex-col items-center justify-center gap-2 group active:scale-95 transition-all">
+                                    <button onClick={abrirRetiro} className="bg-white border-4 border-slate-200 hover:border-[#003366] h-32 rounded-2xl shadow-md flex flex-col items-center justify-center gap-2 group active:scale-95 transition-all">
                                         <DollarSign size={40} className="text-slate-400 group-hover:text-[#003366]" />
                                         <span className="text-xl font-bold text-[#003366]">Retiro de Efectivo</span>
                                     </button>
 
-                                    <button onClick={() => mostrarOpcionEnDesarrollo('Consulta de Saldo')} className="bg-white border-4 border-slate-200 hover:border-[#003366] h-32 rounded-2xl shadow-md flex flex-col items-center justify-center gap-2 group active:scale-95 transition-all">
-                                        <Wallet size={40} className="text-slate-400 group-hover:text-[#003366]" />
-                                        <span className="text-xl font-bold text-[#003366]">Consulta de Saldo</span>
+                                    <button onClick={() => setStep('validator')} className="bg-white border-4 border-slate-200 hover:border-[#003366] h-32 rounded-2xl shadow-md flex flex-col items-center justify-center gap-2 group active:scale-95 transition-all">
+                                        <Camera size={40} className="text-slate-400 group-hover:text-[#003366]" />
+                                        <span className="text-xl font-bold text-[#003366]">Validar Depósito</span>
                                     </button>
 
                                     <button onClick={() => mostrarOpcionEnDesarrollo('Mini Extracto')} className="bg-white border-4 border-slate-200 hover:border-[#003366] h-32 rounded-2xl shadow-md flex flex-col items-center justify-center gap-2 group active:scale-95 transition-all">
@@ -386,6 +498,13 @@ const AtmInterface = () => {
                             </div>
                         )}
 
+                        {/* detector de billetes */}
+                        {step === 'validator' && (
+                            <div className="w-full h-full flex flex-col items-center justify-center animate-in fade-in absolute inset-0 z-50 bg-[#001a33]/95 rounded-xl">
+                                <DetectorBilletes onClose={() => setStep('main_menu')} />
+                            </div>
+                        )}
+
                         {step === 'timeout' && (
                             <div className="w-full h-full flex flex-col items-center justify-center animate-in fade-in">
                                 <AlertCircle size={80} className="text-red-500 mb-6 animate-bounce" />
@@ -398,9 +517,157 @@ const AtmInterface = () => {
                                 </button>
                             </div>
                         )}
+                        {/* flujo de retiro de efectivo */}
+                        {step === 'withdraw_amount' && (
+                            <div className="w-full h-full flex flex-col items-center justify-center animate-in fade-in">
+                                <h2 className="text-3xl font-black text-[#003366] italic mb-4">Retiro de Efectivo</h2>
+                                <p className="text-slate-500 font-semibold mb-6">Ingrese el monto a retirar</p>
+
+                                {retiroError && (
+                                    <div className="bg-red-100 text-red-600 px-4 py-2 rounded-lg font-bold mb-4">
+                                        {retiroError}
+                                    </div>
+                                )}
+
+                                <div className="border-4 border-slate-300 bg-slate-50 px-12 py-4 rounded-lg shadow-inner mb-6 flex items-center justify-center w-72 h-20">
+                                    <span className="text-4xl font-black text-[#003366]">
+                                        Bs {retiroMonto || '0'}
+                                    </span>
+                                </div>
+
+                                <div className="flex gap-3 mb-6">
+                                    {[50, 100, 200, 500].map(valor => (
+                                        <button
+                                            key={valor}
+                                            onClick={() => setRetiroMonto(String(valor))}
+                                            className="bg-white border-2 border-slate-300 px-5 py-3 rounded-xl font-black text-[#003366] hover:bg-slate-50"
+                                        >
+                                            Bs {valor}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                <div className="grid grid-cols-3 gap-3 bg-slate-100 p-4 rounded-2xl shadow-lg border border-slate-200">
+                                    {[1,2,3,4,5,6,7,8,9,'BORRAR',0,'ACEPTAR'].map((btn) => (
+                                        <button
+                                            key={btn}
+                                            onClick={() => {
+                                                if (btn === 'ACEPTAR') solicitarRetiro();
+                                                else if (btn === 'BORRAR') borrarRetiro();
+                                                else agregarDigitoRetiro(btn);
+                                            }}
+                                            className={`h-12 w-20 rounded-lg font-black text-xl flex items-center justify-center active:scale-95 border-b-4 transition-all shadow-sm ${
+                                                btn === 'ACEPTAR'
+                                                    ? 'bg-green-500 text-white border-green-700 hover:bg-green-600'
+                                                    : btn === 'BORRAR'
+                                                        ? 'bg-red-500 text-white border-red-700 hover:bg-red-600'
+                                                        : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                                            }`}
+                                        >
+                                            {btn}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                <div className="absolute bottom-0 left-0">
+                                    <button onClick={() => setStep('main_menu')} className="bg-[#003366] text-white px-6 py-3 rounded-xl font-bold text-lg shadow-md hover:bg-blue-900 active:scale-95 transition-all">
+                                        VOLVER
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                        {/* visualizacion de calculo del algoritmo voraz */}
+                        {step === 'withdraw_preview' && retiroResultado && (
+                            <div className="w-full h-full flex flex-col items-center justify-center animate-in fade-in px-10">
+                                <h2 className="text-3xl font-black text-[#003366] italic mb-3">Confirmar Retiro</h2>
+                                <p className="text-slate-500 font-semibold mb-6">
+                                    Monto solicitado: Bs {retiroResultado.montoSolicitado}
+                                </p>
+
+                                <div className="w-full max-w-3xl bg-white border-2 border-slate-200 rounded-2xl shadow-lg p-6 space-y-4 overflow-y-auto max-h-64">
+                                    {retiroResultado.detalles.map((detalle, index) => (
+                                        <div key={index} className="border border-slate-200 rounded-xl p-4">
+                                            <div className="flex justify-between items-center mb-2">
+                                                <span className="font-black text-[#003366] text-lg">
+                                                    {detalle.cantidad} x Bs {detalle.denominacion}
+                                                </span>
+                                                <span className="text-slate-500 font-bold">
+                                                    Caseta #{detalle.idCaseta}
+                                                </span>
+                                            </div>
+
+                                            <div className="flex flex-wrap gap-2">
+                                                {detalle.numerosSerie.map((serie) => (
+                                                    <span key={serie} className="px-3 py-1 bg-slate-100 border border-slate-300 rounded-full text-xs font-mono text-slate-700">
+                                                        {serie}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {retiroError && (
+                                    <div className="bg-red-100 text-red-600 px-4 py-2 rounded-lg font-bold mt-4">
+                                        {retiroError}
+                                    </div>
+                                )}
+
+                                <div className="flex gap-4 mt-8">
+                                    <button
+                                        onClick={cancelarRetiro}
+                                        className="bg-red-600 text-white px-8 py-3 rounded-xl font-bold shadow-md hover:bg-red-700 active:scale-95 transition-all"
+                                    >
+                                        CANCELAR
+                                    </button>
+
+                                    <button
+                                        onClick={confirmarRetiro}
+                                        disabled={cargando}
+                                        className="bg-[#003366] text-white px-8 py-3 rounded-xl font-bold shadow-md hover:bg-blue-900 active:scale-95 transition-all"
+                                    >
+                                        {cargando ? 'PROCESANDO...' : 'CONFIRMAR ENTREGA'}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                        {/* pantalla de exito en el retiro fisico */}
+                        {step === 'withdraw_success' && retiroResultado && (
+                            <div className="w-full h-full flex flex-col items-center justify-center animate-in zoom-in-95">
+                                <DollarSign size={70} className="text-green-600 mb-4" />
+                                <h2 className="text-4xl font-black text-[#003366] italic mb-2">Retiro Exitoso</h2>
+                                <p className="text-xl text-slate-600 font-semibold mb-6">
+                                    Se dispensó Bs {retiroResultado.montoDispensado}
+                                </p>
+
+                                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 w-full max-w-2xl overflow-y-auto max-h-48">
+                                    <h3 className="text-lg font-black text-[#003366] mb-3">Billetes entregados</h3>
+                                    <div className="space-y-3">
+                                        {retiroResultado.detalles.map((detalle, index) => (
+                                            <div key={index} className="flex justify-between border-b border-slate-200 pb-2">
+                                                <span className="font-bold text-slate-700">
+                                                    {detalle.cantidad} x Bs {detalle.denominacion}
+                                                </span>
+                                                <span className="text-slate-500 text-xs text-right max-w-[50%]">
+                                                    {detalle.numerosSerie.join(', ')}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <button
+                                    onClick={volverAlMenuTrasRetiro}
+                                    className="mt-8 bg-[#003366] text-white px-8 py-4 rounded-xl font-bold text-xl shadow-lg hover:bg-blue-900 active:scale-95 transition-all"
+                                >
+                                    VOLVER AL MENÚ
+                                </button>
+                            </div>
+                        )}
                     </main>
                 </div>
 
+                {/* ranura de deposito y entrega de dinero */}
                 <div className="absolute bottom-4 w-full flex justify-around px-32">
                     <div className="w-48 h-8 bg-black rounded-full shadow-[0_5px_15px_rgba(0,0,0,0.5)] border-4 border-gray-600"></div>
                     <div className="w-48 h-8 bg-black rounded-full shadow-[0_5px_15px_rgba(0,0,0,0.5)] border-4 border-gray-600 relative overflow-hidden">

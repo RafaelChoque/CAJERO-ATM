@@ -2,6 +2,8 @@ package com.bisa.atm.Entities;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "cajeros")
@@ -28,6 +30,9 @@ public class Cajero {
 
     @Column(length = 50)
     private String longitud;
+
+    @OneToMany(mappedBy = "cajero", cascade = CascadeType.ALL, orphanRemoval = false)
+    private List<Caseta> casetas = new ArrayList<>();
 
     public Cajero() {
 
@@ -59,5 +64,10 @@ public class Cajero {
 
     public void darDeBajaLogica() {
         this.estado = "ELIMINADO";
+    }
+
+    public void agregarCaseta(Caseta caseta) {
+        casetas.add(caseta);
+        caseta.setCajero(this);
     }
 }

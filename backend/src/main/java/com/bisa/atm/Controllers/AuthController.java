@@ -1,5 +1,7 @@
 package com.bisa.atm.Controllers;
 
+import com.bisa.atm.Entities.CuentaBancaria;
+import com.bisa.atm.Repositories.CuentaBancariaRepository;
 import com.bisa.atm.dto.LoginRequest;
 import com.bisa.atm.Repositories.CajeroRepository;
 import com.bisa.atm.Services.AuthService;
@@ -15,8 +17,12 @@ import java.util.Map;
 @CrossOrigin(origins = "*")
 public class AuthController {
 
-    @Autowired private AuthService authService;
-    @Autowired private CajeroRepository cajeroRepository;
+    @Autowired
+    private AuthService authService;
+    @Autowired
+    private CajeroRepository cajeroRepository;
+    @Autowired
+    private CuentaBancariaRepository cuentaBancariaRepository;
 
     //recibe las credenciales del admin, y lo valida con la bd y les da su token JWT
     @PostMapping("/login-admin")
@@ -67,6 +73,25 @@ public class AuthController {
             return ResponseEntity.ok(cajerosActivos);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("message", "Error al cargar mapa"));
+        }
+    }
+
+    // el cliente puede ver el detalle de su cuenta
+    @GetMapping("/cuenta/{idCuenta}")
+    public ResponseEntity<?> obtenerCuenta(@PathVariable Long idCuenta) {
+        try {
+            CuentaBancaria cuenta = cuentaBancariaRepository.findById(idCuenta)
+                    .orElseThrow(() -> new RuntimeException("Cuenta no encontrada"));
+
+            return ResponseEntity.ok(Map.of(
+                    "idCuenta", cuenta.getIdCuenta(),
+                    "saldo", cuenta.getSaldo(),
+                    "moneda", cuenta.getMoneda(),
+                    "tipoCuenta", cuenta.getTipoCuenta(),
+                    "numeroCuenta", cuenta.getNumeroCuenta()
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         }
     }
 }

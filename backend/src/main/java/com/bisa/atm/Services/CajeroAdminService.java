@@ -1,5 +1,6 @@
 package com.bisa.atm.Services;
 
+import com.bisa.atm.Entities.Caseta;
 import com.bisa.atm.dto.CajeroDto;
 import com.bisa.atm.Entities.Cajero;
 import com.bisa.atm.Repositories.CajeroRepository;
@@ -45,6 +46,11 @@ public class CajeroAdminService {
                 dto.getLatitud(),
                 dto.getLongitud()
         );
+        nuevoCajero.agregarCaseta(new Caseta(10));
+        nuevoCajero.agregarCaseta(new Caseta(20));
+        nuevoCajero.agregarCaseta(new Caseta(50));
+        nuevoCajero.agregarCaseta(new Caseta(100));
+        nuevoCajero.agregarCaseta(new Caseta(200));
         cajeroRepository.save(nuevoCajero);
     }
 

@@ -49,7 +49,9 @@ public class SecurityConfig {
 
                         //rutas privadas (token y rol)
                         .requestMatchers("/api/admin/**").hasAuthority("ADMINISTRADOR")
+                        .requestMatchers("/api/admin/casetas/**").hasAuthority("ADMINISTRADOR")
                         .requestMatchers("/api/cajero/**").hasAnyAuthority("ADMINISTRADOR", "MANTENIMIENTO")
+                        .requestMatchers("/api/cliente/**").hasAuthority("CLIENTE")
 
                         .anyRequest().authenticated()
                 )
