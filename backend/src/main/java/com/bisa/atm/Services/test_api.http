@@ -1,0 +1,9 @@
+POST http://localhost:8083/api/cliente/transferencias
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoiQ0xJRU5URSIsInN1YiI6IjU0MTI1NDE1IiwiaWF0IjoxNzc2MDAxNTYxLCJleHAiOjE3NzYwMDg3NjF9.jhhz7muIyLgLfNolvfk8QuCyyJVPP1Fo1dbH0mnpyQc
+Content-Type: application/json
+
+{
+  "idCuentaOrigen": 4,
+  "numeroCuentaDestino": "4008303985",
+  "monto": 50
+}

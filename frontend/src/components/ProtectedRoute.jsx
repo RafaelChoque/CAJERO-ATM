@@ -4,17 +4,15 @@ import { useAuth } from '../context/AuthContext';
 const ProtectedRoute = ({ allowedRoles }) => {
     const { user, clientUser, isAuthenticated, loading } = useAuth();
 
-    if (loading) return <div className="flex h-screen items-center justify-center bg-gray-900 text-white">Verificando seguridad...</div>;
+    if (loading) return <div className="...">Verificando seguridad...</div>;
 
-    if (allowedRoles && (allowedRoles.includes('CLIENTE') || allowedRoles.includes('cliente'))) {
-        if (!clientUser) {
-            return <Navigate to="/movil/login" replace />;
-        }
+    if (allowedRoles.some(role => ['CLIENTE', 'cliente'].includes(role))) {
+        if (!clientUser) return <Navigate to="/movil/login" replace />;
         return <Outlet />;
     }
 
     if (!isAuthenticated || !user) {
-        return <Navigate to="/" replace />;
+        return <Navigate to="/admin/login" replace />; // Centraliza el login de admin aquí
     }
 
     if (allowedRoles && !allowedRoles.includes(user.rol)) {
