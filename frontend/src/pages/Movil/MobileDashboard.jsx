@@ -10,7 +10,7 @@ import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 
-import { Html5QrcodeScanner } from 'html5-qrcode';
+import { Html5Qrcode } from 'html5-qrcode';
 import { useAuth } from '../../context/AuthContext';
 import DetectorBilletes from '../../components/DetectorBilletes';
 
@@ -27,22 +27,36 @@ L.Icon.Default.mergeOptions({
 
 const CustomQrScanner = ({ onScanSuccess }) => {
     useEffect(() => {
-        const scanner = new Html5QrcodeScanner(
-            "reader",
-            { fps: 10, qrbox: { width: 250, height: 250 } },
-            false
-        );
+        const html5QrCode = new Html5Qrcode("reader");
 
-        scanner.render(
+        html5QrCode.start(
+            { facingMode: "environment" },
+            { fps: 10, qrbox: { width: 250, height: 250 } },
             (decodedText) => {
-                scanner.clear();
-                onScanSuccess(decodedText);
+                html5QrCode.stop().then(() => {
+                    html5QrCode.clear();
+                    onScanSuccess(decodedText);
+                }).catch(console.error);
             },
-            (error) => {}
-        );
+            (errorMessage) => {}
+        ).catch((err) => {
+            html5QrCode.start(
+                { facingMode: "user" },
+                { fps: 10, qrbox: { width: 250, height: 250 } },
+                (decodedText) => {
+                    html5QrCode.stop().then(() => {
+                        html5QrCode.clear();
+                        onScanSuccess(decodedText);
+                    }).catch(console.error);
+                },
+                (errorMessage) => {}
+            ).catch(console.error);
+        });
 
         return () => {
-            scanner.clear().catch(e => console.error(e));
+            if (html5QrCode.isScanning) {
+                html5QrCode.stop().then(() => html5QrCode.clear()).catch(console.error);
+            }
         };
     }, [onScanSuccess]);
 
@@ -149,7 +163,7 @@ const MobileDashboard = () => {
         });
 
         if (confirmar) {
-             cerrarSesionCliente();
+            cerrarSesionCliente();
         }
     };
 
@@ -298,7 +312,7 @@ const MobileDashboard = () => {
                                     </div>
                                     <span className="text-[10px] font-bold text-slate-600 text-center leading-tight">Acceso<br/>Cajero QR</span>
                                 </button>
-                                 {/* btn oara ver cajeros en mapa */}
+                                {/* btn oara ver cajeros en mapa */}
                                 <button onClick={() => setView('mapa')} className="flex flex-col items-center gap-2 group flex-1">
                                     <div className="w-14 h-14 rounded-full bg-white border border-slate-200 shadow-sm flex items-center justify-center text-[#004a8e] group-hover:bg-[#004a8e] group-hover:text-white group-active:scale-95 transition-all">
                                         <MapPin size={24} />

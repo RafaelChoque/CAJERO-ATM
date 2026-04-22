@@ -1,5 +1,7 @@
 package com.bisa.atm.Controllers;
 
+import com.bisa.atm.Entities.CuentaBancaria;
+import com.bisa.atm.Repositories.CuentaBancariaRepository;
 import com.bisa.atm.Services.DispensacionService;
 import com.bisa.atm.Services.RetiroService;
 import com.bisa.atm.dto.ResultadoDispensacionDto;
@@ -18,18 +20,28 @@ public class RetiroQrController {
 
     private final DispensacionService dispensacionService;
     private final RetiroService retiroService;
+    private final CuentaBancariaRepository cuentaBancariaRepository;
 
     //inyeccion de dependencias de retiro qr
     public RetiroQrController(DispensacionService dispensacionService,
-                              RetiroService retiroService) {
+                              RetiroService retiroService,CuentaBancariaRepository cuentaBancariaRepository) {
         this.dispensacionService = dispensacionService;
         this.retiroService = retiroService;
+        this.cuentaBancariaRepository = cuentaBancariaRepository;
     }
 
     // para reservar billetes para retiro qr
     @PostMapping("/reservar")
     public ResponseEntity<?> reservar(@RequestBody SolicitudRetiroDto request) {
         try {
+            // VALIDA SALDO PRIMERO
+            CuentaBancaria cuenta = cuentaBancariaRepository.findById(request.getIdCuenta())
+                    .orElseThrow(() -> new RuntimeException("Cuenta no encontrada"));
+
+            if (cuenta.getSaldo().compareTo(request.getMonto()) < 0) {
+                throw new RuntimeException("Saldo insuficiente");
+            }
+
             ResultadoDispensacionDto resultado =
                     dispensacionService.reservarBilletes(request.getIdCajero(), request.getMonto());
 

@@ -16,16 +16,28 @@ const MobileLogin = () => {
 
     const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
+    const generarIdDispositivo = () => {
+        let dispositivoId = localStorage.getItem('dispositivo_id');
+        if (!dispositivoId) {
+            dispositivoId = 'DEVICE-' + Math.random().toString(36).substr(2, 9) + '-' + new Date().getTime();
+            localStorage.setItem('dispositivo_id', dispositivoId);
+        }
+        return dispositivoId;
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
             setCargando(true);
+            const dispositivoId = generarIdDispositivo();
+
             const response = await fetch(`/api/auth/login-cliente`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     nombreUsuario: formData.username,
-                    contrasena: formData.password
+                    contrasena: formData.password,
+                    dispositivoId: dispositivoId
                 })
             });
 

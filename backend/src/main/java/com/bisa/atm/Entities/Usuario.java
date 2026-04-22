@@ -21,6 +21,15 @@ public class Usuario {
     @Column(nullable = false, length = 20)
     private String rol;
 
+    @Column(name = "ultimo_token_jwt", columnDefinition = "TEXT")
+    private String ultimoTokenJwt;
+
+    @Column(name = "fecha_ultimo_acceso")
+    private LocalDateTime fechaUltimoAcceso;
+
+    @Column(name = "dispositivo_identificador", length = 255)
+    private String dispositivoIdentificador;
+
     @OneToOne
     @JoinColumn(name = "id_persona", nullable = false)
     private Persona persona;

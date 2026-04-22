@@ -37,7 +37,7 @@ public class AuthService {
     }
 
     // login para la app movil donde controla bloqueos, intentos y cambio de contraseña temporal
-    public Map<String, Object> loginCliente(String username, String password) {
+    public Map<String, Object> loginCliente(String username, String password, String dispositivoId) {
         Usuario usuario = usuarioRepository.findByNombreUsuario(username)
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
 
@@ -77,9 +77,21 @@ public class AuthService {
             CuentaBancaria cuenta = cuentaRepository.findByUsuario_IdUsuario(usuario.getIdUsuario())
                     .orElseThrow(() -> new RuntimeException("El cliente no tiene cuenta asignada"));
 
+            if (usuario.getUltimoTokenJwt() != null && !usuario.getUltimoTokenJwt().isEmpty()) {
+                String dispositivoAnterior = usuario.getDispositivoIdentificador();
+                if (dispositivoAnterior != null && !dispositivoAnterior.equals(dispositivoId)) {
+                    throw new RuntimeException("Tu cuenta está siendo usada en otro dispositivo. Solo se permite un dispositivo activo por cuenta.");
+                }
+            }
+
             // generar el token JWT
             UserDetails userDetails = userDetailsService.loadUserByUsername(usuario.getNombreUsuario());
             String token = jwtService.generarToken(userDetails);
+
+            usuario.setUltimoTokenJwt(token);
+            usuario.setDispositivoIdentificador(dispositivoId);
+            usuario.setFechaUltimoAcceso(LocalDateTime.now());
+            usuarioRepository.save(usuario);
 
             //mapear solo lo que la app necesita para funcionar
             return Map.of(

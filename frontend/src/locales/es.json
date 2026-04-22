@@ -1,0 +1,62 @@
+{
+  "welcome": {
+    "title": "simplificando tu vida",
+    "button": "SIN TARJETA"
+  },
+  "options": {
+    "title": "Selecciona la operación",
+    "qr": "Retiro QR Móvil"
+  },
+  "qr": {
+    "title": "Escanee este código",
+    "subtitle": "con su App BISA Móvil",
+    "timeLeft": "Tiempo restante:",
+    "cancel": "CANCELAR"
+  },
+  "pin": {
+    "title": "Introduce el número PIN",
+    "continue": "Continuar",
+    "delete": "BORRAR",
+    "accept": "ACEPTAR",
+    "errorIncorrect": "PIN Incorrecto. Intento",
+    "of": "de 3.",
+    "errorBlocked": "Operación Denegada",
+    "errorConnection": "Error de conexión. Intente nuevamente."
+  },
+  "menu": {
+    "title": "¿Qué transacción deseas realizar?",
+    "subtitle": "Sesión segura iniciada mediante BISA Móvil",
+    "withdraw": "Retiro de Efectivo",
+    "validator": "Validar Depósito",
+    "statement": "Mini Extracto",
+    "transfer": "Transferencias",
+    "logout": "FINALIZAR SESIÓN"
+  },
+  "withdraw": {
+    "title": "Retiro de Efectivo",
+    "subtitle": "Ingrese el monto a retirar",
+    "amount": "Bs",
+    "confirm": "Confirmar Retiro",
+    "confirmBtn": "CONFIRMAR ENTREGA",
+    "success": "Retiro Exitoso",
+    "dispensed": "Se dispensó",
+    "delivered": "Billetes entregados",
+    "back": "VOLVER AL MENÚ",
+    "return": "VOLVER"
+  },
+  "terminal": {
+    "number": "Terminal #",
+    "notConfigured": "Terminal no configurada",
+    "assignCode": "Por favor, asigne el código de la base de datos a este Cajero",
+    "example": "Ejemplo: ATM-LPZ-1",
+    "setupBtn": "Vincular y Arrancar"
+  },
+  "timeout": {
+    "title": "Tiempo Expirado",
+    "back": "VOLVER AL INICIO"
+  },
+  "common": {
+    "back": "VOLVER",
+    "cancel": "CANCELAR"
+  }
+}

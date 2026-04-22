@@ -7,5 +7,6 @@ public class LoginRequest {
 
     private String nombreUsuario;
     private String contrasena;
+    private String dispositivoId;  // Identificador único del dispositivo
 
 }

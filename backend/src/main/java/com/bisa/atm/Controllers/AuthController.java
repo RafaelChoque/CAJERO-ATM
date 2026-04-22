@@ -38,7 +38,11 @@ public class AuthController {
     @PostMapping("/login-cliente")
     public ResponseEntity<?> loginCliente(@RequestBody LoginRequest request) {
         try {
-            return ResponseEntity.ok(authService.loginCliente(request.getNombreUsuario(), request.getContrasena()));
+            return ResponseEntity.ok(authService.loginCliente(
+                    request.getNombreUsuario(),
+                    request.getContrasena(),
+                    request.getDispositivoId()
+            ));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("message", "Error: " + e.getMessage()));
         }

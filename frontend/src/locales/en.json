@@ -1,0 +1,62 @@
+{
+  "welcome": {
+    "title": "simplifying your life",
+    "button": "WITHOUT CARD"
+  },
+  "options": {
+    "title": "Select the operation",
+    "qr": "Mobile QR Withdrawal"
+  },
+  "qr": {
+    "title": "Scan this code",
+    "subtitle": "with your BISA Mobile App",
+    "timeLeft": "Time remaining:",
+    "cancel": "CANCEL"
+  },
+  "pin": {
+    "title": "Enter your PIN number",
+    "continue": "Continue",
+    "delete": "DELETE",
+    "accept": "ACCEPT",
+    "errorIncorrect": "Incorrect PIN. Attempt",
+    "of": "of 3.",
+    "errorBlocked": "Operation Denied",
+    "errorConnection": "Connection error. Please try again."
+  },
+  "menu": {
+    "title": "What transaction would you like to make?",
+    "subtitle": "Secure session initiated via BISA Mobile",
+    "withdraw": "Cash Withdrawal",
+    "validator": "Validate Deposit",
+    "statement": "Mini Statement",
+    "transfer": "Transfers",
+    "logout": "END SESSION"
+  },
+  "withdraw": {
+    "title": "Cash Withdrawal",
+    "subtitle": "Enter the amount to withdraw",
+    "amount": "Bs",
+    "confirm": "Confirm Withdrawal",
+    "confirmBtn": "CONFIRM DELIVERY",
+    "success": "Successful Withdrawal",
+    "dispensed": "Dispensed",
+    "delivered": "Delivered bills",
+    "back": "BACK TO MENU",
+    "return": "BACK"
+  },
+  "terminal": {
+    "number": "Terminal #",
+    "notConfigured": "Terminal not configured",
+    "assignCode": "Please assign the database code to this ATM",
+    "example": "Example: ATM-LPZ-1",
+    "setupBtn": "Link and Start"
+  },
+  "timeout": {
+    "title": "Time Expired",
+    "back": "BACK TO START"
+  },
+  "common": {
+    "back": "BACK",
+    "cancel": "CANCEL"
+  }
+}
