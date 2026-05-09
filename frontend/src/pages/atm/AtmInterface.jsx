@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Delete, AlertCircle, RefreshCw, Lock, ArrowLeft, ChevronRight, Wallet, Receipt, DollarSign, Settings, Camera } from 'lucide-react';
+import { Delete, AlertCircle, RefreshCw, ArrowLeft, ChevronRight, Wallet, DollarSign, Settings, Camera, FileText } from 'lucide-react';
 import QRCode from 'react-qr-code';
 import { useAuth } from '../../context/AuthContext';
 import { useTranslation } from 'react-i18next';
@@ -31,13 +31,80 @@ const AtmInterface = () => {
     const stompClientRef = useRef(null);
     const timerInterval = useRef(null);
 
+    // Referencia para el temporizador de inactividad
+    const inactivityTimerRef = useRef(null);
+
     const [retiroMonto, setRetiroMonto] = useState('');
     const [retiroError, setRetiroError] = useState(null);
     const [retiroResultado, setRetiroResultado] = useState(null);
 
+    // Limpieza general al desmontar
     useEffect(() => {
-        return () => detenerTodo();
+        return () => {
+            detenerTodo();
+            if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+        };
     }, []);
+
+    // Lógica del temporizador de inactividad silencioso (60 segundos)
+    useEffect(() => {
+        const resetInactivityTimer = () => {
+            if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+
+            // Solo activa el temporizador si NO estamos en configuración ni en la pantalla de bienvenida
+            if (step !== 'setup' && step !== 'welcome') {
+                inactivityTimerRef.current = setTimeout(() => {
+                    // Reinicio silencioso sin mostrar alertas
+                    reiniciarCajero();
+                }, 60000); // 60000 ms = 60 segundos
+            }
+        };
+
+        const eventosActividad = ['mousedown', 'keydown', 'touchstart'];
+
+        const manejarActividad = () => resetInactivityTimer();
+
+        eventosActividad.forEach(evento => document.addEventListener(evento, manejarActividad));
+
+        // Iniciar el temporizador al cambiar de paso
+        resetInactivityTimer();
+
+        return () => {
+            eventosActividad.forEach(evento => document.removeEventListener(evento, manejarActividad));
+        };
+    }, [step]);
+
+    // Soporte para teclado físico (Laptop/PC)
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            // Si el sistema está procesando (cargando), ignoramos el teclado
+            if (cargando) return;
+
+            // Lógica para la pantalla del PIN
+            if (step === 'pin') {
+                if (/^[0-9]$/.test(e.key)) {
+                    addNumber(e.key);
+                } else if (e.key === 'Backspace') {
+                    setPin(''); // Borra todo el PIN
+                } else if (e.key === 'Enter') {
+                    validarPin();
+                }
+            }
+            // Lógica para la pantalla de Retiro (Monto)
+            else if (step === 'withdraw_amount') {
+                if (/^[0-9]$/.test(e.key)) {
+                    agregarDigitoRetiro(e.key);
+                } else if (e.key === 'Backspace') {
+                    borrarRetiro(); // Borra el último dígito
+                } else if (e.key === 'Enter') {
+                    solicitarRetiro();
+                }
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [step, pin, retiroMonto, cargando, idCuenta]);
 
     const toggleIdioma = () => {
         const nuevoIdioma = i18n.language === 'es' ? 'en' : 'es';
@@ -48,6 +115,7 @@ const AtmInterface = () => {
     const configurarTerminal = (e) => {
         e.preventDefault();
         if (!inputSetup) return;
+
         localStorage.setItem('ATM_ID', inputSetup);
         setCajeroId(inputSetup);
         setStep('welcome');
@@ -58,11 +126,14 @@ const AtmInterface = () => {
         setCargando(true);
         try {
             const response = await apiCall(`/api/qr/generar/${cajeroId}`, { method: 'POST' });
+
             if (!response.ok) throw new Error("Terminal temporalmente fuera de servicio.");
+
             const data = await response.json();
             setCodigoToken(data.codigoToken);
             setStep('qr');
             iniciarTemporizador();
+
             conectarWebSocket(data.codigoToken);
         } catch (err) {
             setError(err.message);
@@ -75,11 +146,15 @@ const AtmInterface = () => {
         const wsUrl = window.location.origin + '/ws-atm';
         const socket = new SockJS(wsUrl);
         const stompClient = Stomp.over(socket);
+
         stompClient.debug = null;
+
         stompClient.connect({}, () => {
             stompClientRef.current = stompClient;
+
             stompClient.subscribe(`/topic/qr/${codigoActual}`, (mensaje) => {
                 const data = JSON.parse(mensaje.body);
+
                 if (data.estado === 'VINCULADO') {
                     detenerTodo();
                     setIdCuenta(data.idCuenta);
@@ -126,6 +201,7 @@ const AtmInterface = () => {
 
     const validarPin = async () => {
         if (pin.length !== 4) return;
+
         setCargando(true);
         setPinError(null);
         try {
@@ -143,12 +219,15 @@ const AtmInterface = () => {
             } else {
                 const data = await response.json();
                 setPin('');
+
                 if (data.mensaje && (data.mensaje.includes("bloqueada") || data.mensaje.includes("inactiva"))) {
                     showError("Operación Denegada", data.mensaje);
                     reiniciarCajero();
                     return;
                 }
+
                 const intentosActuales = pinAttempts + 1;
+
                 if (intentosActuales >= 3) {
                     showError("Seguridad BISA", "Has ingresado un PIN incorrecto 3 veces. Por seguridad, la operación ha sido cancelada.");
                     reiniciarCajero();
@@ -173,6 +252,9 @@ const AtmInterface = () => {
         setError(null);
         setPinError(null);
         setPinAttempts(0);
+        setRetiroMonto('');
+        setRetiroError(null);
+        setRetiroResultado(null);
         setStep('welcome');
     };
 
@@ -204,19 +286,26 @@ const AtmInterface = () => {
             setRetiroError('Ingrese un monto válido');
             return;
         }
+
         setCargando(true);
         setRetiroError(null);
+
         try {
             const response = await apiCall('/api/qr/retiros/reservar', {
                 method: 'POST',
                 body: JSON.stringify({
                     idCuenta: idCuenta,
                     idCajero: Number(cajeroId),
-                    monto: Number(retiroMonto) || 0
+                    monto: Number(retiroMonto)
                 })
             });
+
             const data = await response.json();
-            if (!response.ok) throw new Error(data.message || 'No se pudo preparar el retiro');
+
+            if (!response.ok) {
+                throw new Error(data.message || 'No se pudo preparar el retiro');
+            }
+
             setRetiroResultado(data);
             setStep('withdraw_preview');
         } catch (err) {
@@ -228,14 +317,20 @@ const AtmInterface = () => {
 
     const confirmarRetiro = async () => {
         if (!retiroResultado) return;
+
         setCargando(true);
         try {
             const response = await apiCall(`/api/qr/retiros/confirmar?idCuenta=${idCuenta}`, {
                 method: 'POST',
                 body: JSON.stringify(retiroResultado)
             });
+
             const data = await response.json();
-            if (!response.ok) throw new Error(data.message || 'No se pudo confirmar el retiro');
+
+            if (!response.ok) {
+                throw new Error(data.message || 'No se pudo confirmar el retiro');
+            }
+
             setStep('withdraw_success');
         } catch (err) {
             setRetiroError(err.message || 'No se pudo confirmar el retiro');
@@ -249,6 +344,7 @@ const AtmInterface = () => {
             setStep('main_menu');
             return;
         }
+
         setCargando(true);
         try {
             await apiCall('/api/qr/retiros/cancelar', {
@@ -274,357 +370,394 @@ const AtmInterface = () => {
     };
 
     return (
-        <div className="h-screen w-screen bg-slate-100 flex items-center justify-center font-sans overflow-hidden select-none p-2">
-            {/* Contenedor ATM */}
-            <div className="w-screen max-w-full h-screen bg-slate-900 rounded-3xl border-8 border-slate-800 shadow-2xl overflow-hidden relative flex flex-row">
-                {/* Pantalla */}
-                <div className="flex-1 bg-white overflow-hidden flex flex-col relative px-8">
-                    {/* Botón idioma (Siempre visible, arriba derecha) */}
-                    {step !== 'setup' && (
+        <div className="h-screen w-screen bg-[#d9e2ec] flex items-center justify-center font-sans overflow-hidden select-none">
+            <div className="w-[1024px] h-[768px] bg-[#c0c9d4] rounded-3xl border-[16px] border-[#a5b1c2] shadow-[inset_0_0_50px_rgba(0,0,0,0.2),0_20px_50px_rgba(0,0,0,0.5)] flex flex-col items-center justify-center relative p-12">
+                <div className="w-full h-full bg-white rounded-xl border-8 border-[#2d3436] shadow-[inset_0_0_20px_rgba(0,0,0,0.1)] overflow-hidden relative flex flex-col text-slate-800">
+
+                     {step !== 'setup' && (
                         <button
                             onClick={toggleIdioma}
-                            className="absolute top-3 right-3 z-50 w-10 h-10 flex items-center justify-center bg-[#003366] text-white rounded-full font-black text-xs shadow-lg hover:rotate-12 active:scale-95 transition-all border-2 border-white"
+                            className="absolute top-4 right-4 z-50 w-12 h-12 flex items-center justify-center bg-[#003366] text-white rounded-full font-black text-sm shadow-lg hover:bg-blue-800 active:scale-95 transition-all border-2 border-white"
                         >
                             {i18n.language === 'es' ? 'EN' : 'ES'}
                         </button>
                     )}
 
-                    {/* SETUP */}
-                    {step === 'setup' && (
-                        <div className="w-full h-full bg-slate-900 flex flex-col items-center justify-center p-6">
-                            <Settings size={50} className="text-yellow-400 mb-4 animate-pulse" />
-                            <h2 className="text-2xl font-black text-white text-center mb-2">{t('terminal.notConfigured')}</h2>
-                            <p className="text-blue-200 text-center text-sm mb-6">{t('terminal.assignCode')}</p>
-                            <form onSubmit={configurarTerminal} className="w-full max-w-xs">
-                                <input
-                                    type="text"
-                                    value={inputSetup}
-                                    onChange={(e) => setInputSetup(e.target.value)}
-                                    placeholder={t('terminal.example')}
-                                    className="w-full text-center text-xl font-bold p-3 rounded-lg outline-none mb-3 focus:ring-2 focus:ring-yellow-400"
-                                    autoFocus
-                                />
-                                <button type="submit" className="w-full bg-yellow-400 text-slate-900 font-bold py-3 rounded-lg hover:bg-yellow-500 active:scale-95 transition-all">
-                                    {t('terminal.setupBtn')}
-                                </button>
-                            </form>
-                        </div>
-                    )}
-
-                    {/* WELCOME */}
-                    {step === 'welcome' && (
-                        <div className="w-full h-full bg-gradient-to-b from-slate-50 to-white flex flex-col items-center justify-center p-4 overflow-y-auto">
-                            <img src={logoBisa} alt="BISA" className="h-20 mb-3 drop-shadow-lg" onError={(e) => e.target.style.display = 'none'} />
-                            <h1 className="text-5xl font-black text-[#003366] italic mb-1 text-center">BISA ATM</h1>
-                            <p className="text-base text-[#003366]/80 font-medium italic tracking-wide text-center mb-8">
-                                {t('welcome.title')}
-                            </p>
-
-                            {error && (
-                                <div className="w-full max-w-sm bg-red-50 border border-red-200 rounded-lg p-3 mb-6 flex gap-2">
-                                    <AlertCircle className="text-red-600 flex-shrink-0" size={20} />
-                                    <p className="text-red-600 text-sm font-semibold">{error}</p>
-                                </div>
-                            )}
-
-                            <button
-                                onClick={() => setStep('options')}
-                                className="bg-yellow-400 text-slate-900 px-8 py-3 rounded-full font-bold text-lg hover:bg-yellow-500 active:scale-95 transition-all shadow-lg flex items-center gap-2"
-                            >
-                                {t('welcome.button')} <ChevronRight size={20} />
-                            </button>
-                        </div>
-                    )}
-
-                    {/* OPTIONS */}
-                    {step === 'options' && (
-                        <div className="w-full h-full flex flex-col items-center justify-between p-4 overflow-y-auto bg-white">
-                            <div className="text-center">
-                                <h2 className="text-2xl font-black text-slate-800 mb-4">{t('options.title')}</h2>
+                    {step !== 'welcome' && step !== 'setup' && (
+                        <div className="px-6 py-4 shrink-0 flex items-center justify-between z-10 relative bg-white border-b border-gray-200">
+                            <div className="flex items-center gap-4">
+                                <img src={logoBisa} alt="BISA" className="h-10" onError={(e) => e.target.style.display = 'none'} />
+                                <span className="text-[#003366] font-black italic text-lg uppercase">{t('terminal.number')} {cajeroId}</span>
                             </div>
-
-                            <button
-                                onClick={iniciarOperacionQR}
-                                disabled={cargando}
-                                className="w-full max-w-md bg-white border-2 border-slate-300 rounded-2xl p-6 text-left hover:border-[#003366] hover:bg-blue-50 active:scale-95 transition-all shadow-lg"
-                            >
-                                <h3 className="text-2xl font-black text-[#003366] italic mb-2">{t('options.qr')}</h3>
-                                <p className="text-slate-600 font-semibold">Retira dinero sin tarjeta de forma segura</p>
-                            </button>
-
-                            <button
-                                onClick={reiniciarCajero}
-                                className="w-full max-w-xs bg-slate-800 text-white rounded-full py-2 font-bold hover:bg-slate-900 active:scale-95 transition-all flex items-center justify-center gap-2"
-                            >
-                                <ArrowLeft size={18} /> {t('common.back')}
-                            </button>
+                            {step === 'main_menu' && (
+                                <button onClick={reiniciarCajero} className="bg-red-600 mr-14 text-white px-6 py-2 rounded-lg font-bold shadow-md active:scale-95 text-sm flex items-center gap-2">
+                                    <Delete size={16} /> {t('menu.logout')}
+                                </button>
+                            )}
                         </div>
                     )}
 
-                    {/* QR */}
-                    {step === 'qr' && (
-                        <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-white overflow-y-auto">
-                            <h2 className="text-3xl font-black text-slate-800 text-center mb-4">
-                                {t('qr.title')} <br /> {t('qr.subtitle')}
-                            </h2>
+                    <main className="flex-1 flex flex-col items-center justify-center p-8 relative">
+                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-blue-50 rounded-full blur-3xl -z-10 pointer-events-none"></div>
 
-                            <div className="bg-slate-100 p-4 rounded-2xl border-2 border-slate-300 mb-4">
-                                {codigoToken ? (
-                                    <QRCode value={codigoToken} size={200} fgColor="#003366" />
-                                ) : (
-                                    <div className="w-52 h-52 flex items-center justify-center bg-slate-200 rounded-lg">
-                                        <RefreshCw className="animate-spin text-slate-600" size={32} />
+                        {step === 'setup' && (
+                            <div className="absolute inset-0 w-full h-full bg-[#001a33] flex flex-col items-center justify-center p-12 z-50">
+                                <Settings size={60} className="text-[#f5d000] mb-6 animate-pulse" />
+                                <h2 className="text-3xl font-black text-white uppercase tracking-widest mb-2">{t('terminal.notConfigured')}</h2>
+                                <p className="text-blue-200 mb-8 font-medium">{t('terminal.assignCode')}</p>
+
+                                <form onSubmit={configurarTerminal} className="flex flex-col gap-4 w-full max-w-sm">
+                                    <input
+                                        type="text"
+                                        value={inputSetup}
+                                        onChange={(e) => setInputSetup(e.target.value)}
+                                        placeholder={t('terminal.example')}
+                                        className="w-full text-center text-2xl font-black p-4 rounded-xl outline-none focus:ring-4 focus:ring-[#f5d000]"
+                                        autoFocus
+                                    />
+                                    <button type="submit" className="bg-[#f5d000] text-[#003366] font-black py-4 rounded-xl uppercase tracking-widest hover:bg-[#e6c200] active:scale-95 transition-all shadow-lg">
+                                        {t('terminal.setupBtn')}
+                                    </button>
+                                </form>
+                            </div>
+                        )}
+
+                        {step === 'welcome' && (
+                            <div className="absolute inset-0 w-full h-full bg-gradient-to-br from-blue-50/50 to-white flex flex-col items-center justify-center p-12">
+                                <img src={logoBisa} alt="BISA" className="h-28 mb-4 drop-shadow-lg" onError={(e) => e.target.style.display = 'none'} />
+                                <span className="text-[#003366] font-medium italic text-3xl mb-12">{t('welcome.title')}</span>
+
+                                {error && (
+                                    <div className="absolute top-10 w-3/4 text-red-600 text-xl text-center bg-red-100 p-4 rounded-xl border-2 border-red-300 shadow-md">
+                                        <AlertCircle className="inline mr-2" /> {error}
                                     </div>
                                 )}
-                            </div>
 
-                            <p className="text-lg font-bold text-slate-700 mb-4">
-                                {t('qr.timeLeft')} <span className={timeLeft <= 10 ? 'text-red-600 animate-pulse' : 'text-blue-600'}>{timeLeft}s</span>
-                            </p>
-
-                            <button
-                                onClick={reiniciarCajero}
-                                className="w-full max-w-xs bg-red-600 text-white rounded-full py-2 font-bold hover:bg-red-700 active:scale-95 transition-all flex items-center justify-center gap-2"
-                            >
-                                <Delete size={18} /> {t('qr.cancel')}
-                            </button>
-                        </div>
-                    )}
-
-                    {/* PIN */}
-                    {step === 'pin' && (
-                        <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-white overflow-y-auto">
-                            <h2 className="text-3xl font-black text-slate-800 mb-4 text-center">{t('pin.title')}</h2>
-
-                            {pinError && (
-                                <div className="w-full max-w-sm bg-red-50 border border-red-200 rounded-lg p-2 mb-3 text-red-600 text-sm font-bold text-center">
-                                    {pinError}
+                                <div className="absolute bottom-12 right-12">
+                                    <button
+                                        onClick={() => setStep('options')}
+                                        className="bg-[#f5d000] text-[#003366] px-8 py-4 rounded-full font-black text-xl shadow-lg hover:scale-105 active:scale-95 transition-transform flex items-center gap-3 border-4 border-transparent hover:border-[#003366]/10"
+                                    >
+                                        {t('welcome.button')} <ChevronRight size={28} strokeWidth={3} />
+                                    </button>
                                 </div>
-                            )}
-                            <div className="flex gap-4 mb-8 justify-center">
-                                {[0, 1, 2, 3].map((idx) => (
-                                    <div key={idx} className={`w-16 h-16 rounded-xl font-black text-2xl flex items-center justify-center shadow-md ${pin[idx] ? 'bg-[#003366] text-white' : 'bg-slate-200 text-slate-400'}`}>
-                                        {pin[idx] ? '●' : '○'}
-                                    </div>
-                                ))}
                             </div>
+                        )}
 
-                            <div className="grid grid-cols-4 gap-3 mb-6 bg-slate-100 p-4 rounded-2xl w-full max-w-md shadow-lg border-2 border-slate-200">
-                                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 'BORRAR', 0, 'ACEPTAR'].map((btn) => (
+                        {step === 'options' && (
+                            <div className="w-full h-full flex flex-col items-center justify-center relative animate-in fade-in">
+                                <h2 className="text-4xl font-black text-[#003366] italic mb-12 tracking-tight">{t('options.title')}</h2>
+
+                                <div className="flex flex-col gap-8 w-full max-w-lg ml-auto mr-12">
                                     <button
-                                        key={btn}
-                                        onClick={() => {
-                                            if (btn === 'ACEPTAR') validarPin();
-                                            else if (btn === 'BORRAR') setPin('');
-                                            else addNumber(btn);
-                                        }}
-                                        className={`h-10 rounded font-bold text-xs flex items-center justify-center active:scale-95 transition-all ${
-                                            btn === 'ACEPTAR' ? 'bg-green-500 text-white col-span-2' :
-                                                btn === 'BORRAR' ? 'bg-red-500 text-white col-span-2' :
-                                                    'bg-white text-slate-800 border border-slate-300'
-                                        }`}
+                                        onClick={iniciarOperacionQR}
+                                        disabled={cargando}
+                                        className="flex items-center justify-end gap-6 group"
                                     >
-                                        {btn === 'BORRAR' ? <Delete size={16} /> : btn === 'ACEPTAR' ? '✓' : btn}
+                                        <span className="text-3xl font-bold text-[#003366] group-hover:text-[#f5d000] transition-colors">
+                                            {cargando ? '...' : t('options.qr')}
+                                        </span>
+                                        <div className="w-16 h-10 bg-[#003366] rounded-full shadow-inner group-hover:bg-[#f5d000] transition-colors border-2 border-slate-200"></div>
                                     </button>
-                                ))}
-                            </div>
-
-                            <button
-                                onClick={reiniciarCajero}
-                                className="w-full max-w-xs bg-red-600 text-white rounded-full py-2 font-bold hover:bg-red-700 active:scale-95 transition-all"
-                            >
-                                {t('common.cancel')}
-                            </button>
-                        </div>
-                    )}
-
-                    {/* MAIN MENU */}
-                    {step === 'main_menu' && (
-                        <div className="w-full h-full flex flex-col items-center justify-between p-4 bg-white overflow-y-auto">
-                            <div className="text-center">
-                                <h2 className="text-3xl font-black text-slate-800 mb-2">{t('menu.title')}</h2>
-                                <p className="text-sm font-semibold text-slate-600">{t('menu.subtitle')}</p>
-                            </div>
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 w-full max-w-5xl px-4">
-                                <button
-                                    onClick={abrirRetiro}
-                                    className="bg-green-500 text-white rounded-3xl p-8 font-black text-lg hover:bg-green-600 active:scale-95 transition-all flex flex-col items-center justify-center gap-4 shadow-xl border-b-4 border-green-700"
-                                >
-                                    <DollarSign size={40} />
-                                    <span className="uppercase tracking-tight">{t('menu.withdraw')}</span>
-                                </button>
-                                <button
-                                    onClick={() => setStep('validator')}
-                                    className="bg-[#003366] text-white rounded-3xl p-8 font-black text-lg hover:bg-[#002244] active:scale-95 transition-all flex flex-col items-center justify-center gap-4 shadow-xl border-b-4 border-[#001122]"
-                                >
-                                    <Camera size={40} />
-                                    <span className="uppercase tracking-tight">{t('menu.validator')}</span>
-                                </button>
-                                <button
-                                    onClick={() => mostrarOpcionEnDesarrollo('Mini Extracto')}
-                                    className="bg-slate-200 text-slate-500 rounded-3xl p-8 font-black text-lg opacity-80 cursor-not-allowed flex flex-col items-center justify-center gap-4 border-b-4 border-slate-300"
-                                >
-                                    <Receipt size={40} />
-                                    <span className="uppercase tracking-tight">{t('menu.statement')}</span>
-                                </button>
-                                <button
-                                    onClick={() => mostrarOpcionEnDesarrollo('Transferencias')}
-                                    className="bg-slate-200 text-slate-500 rounded-3xl p-8 font-black text-lg opacity-80 cursor-not-allowed flex flex-col items-center justify-center gap-4 border-b-4 border-slate-300"
-                                >
-                                    <RefreshCw size={40} />
-                                    <span className="uppercase tracking-tight">{t('menu.transfer')}</span>
-                                </button>
-                            </div>
-
-                            <button
-                                onClick={reiniciarCajero}
-                                className="w-full max-w-sm bg-red-600 text-white rounded-full py-2 font-bold hover:bg-red-700 active:scale-95 transition-all flex items-center justify-center gap-2"
-                            >
-                                <Delete size={18} /> {t('menu.logout')}
-                            </button>
-                        </div>
-                    )}
-
-                    {/* VALIDATOR */}
-                    {step === 'validator' && (
-                        <div className="w-full h-full flex items-center justify-center bg-slate-900">
-                            <DetectorBilletes onClose={() => setStep('main_menu')} />
-                        </div>
-                    )}
-
-                    {/* TIMEOUT */}
-                    {step === 'timeout' && (
-                        <div className="w-full h-full flex flex-col items-center justify-center bg-white p-4">
-                            <AlertCircle size={64} className="text-red-600 mb-4 animate-bounce" />
-                            <h2 className="text-2xl font-black text-slate-800 mb-4">{t('timeout.title')}</h2>
-                            <button
-                                onClick={reiniciarCajero}
-                                className="bg-blue-600 text-white px-6 py-2 rounded-full font-bold hover:bg-blue-700 active:scale-95 transition-all flex items-center gap-2"
-                            >
-                                <ArrowLeft size={18} /> {t('timeout.back')}
-                            </button>
-                        </div>
-                    )}
-
-                    {/* WITHDRAW AMOUNT */}
-                    {step === 'withdraw_amount' && (
-                        <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-white overflow-y-auto">
-                            <h2 className="text-3xl font-black text-slate-800 mb-2">{t('withdraw.title')}</h2>
-                            <p className="text-sm font-semibold text-slate-600 mb-4">{t('withdraw.subtitle')}</p>
-
-                            {retiroError && (
-                                <div className="bg-red-100 border border-red-300 text-red-600 px-4 py-2 rounded-lg font-bold mb-4 flex items-center justify-center gap-2 w-full max-w-xs text-center text-sm">
-                                    <AlertCircle size={18} /> {retiroError}
                                 </div>
-                            )}
 
-                            <div className="bg-blue-50 border-2 border-blue-300 rounded-lg p-4 mb-4 w-full max-w-xs text-center">
-                                <p className="text-2xl font-black text-blue-600">{t('withdraw.amount')} {retiroMonto || '0'}</p>
-                            </div>
-
-                            <div className="flex gap-2 mb-4 flex-wrap justify-center w-full max-w-xs">
-                                {[50, 100, 200, 500].map(valor => (
+                                <div className="absolute bottom-4 left-4">
                                     <button
-                                        key={valor}
-                                        onClick={() => setRetiroMonto(String(valor))}
-                                        className="px-3 py-1 bg-white border-2 border-slate-300 rounded-lg text-sm font-bold text-slate-800 hover:border-blue-600 hover:bg-blue-50 active:scale-95 transition-all"
+                                        onClick={reiniciarCajero}
+                                        className="bg-[#003366] text-white px-6 py-3 rounded-xl font-bold text-lg flex items-center gap-2 shadow-md hover:bg-blue-900 active:scale-95 transition-all"
                                     >
-                                        {valor}
+                                        <ArrowLeft size={20} /> {t('common.back')}
                                     </button>
-                                ))}
+                                </div>
                             </div>
+                        )}
 
-                            <div className="grid grid-cols-3 gap-2 mb-4 bg-slate-100 p-3 rounded-lg w-full max-w-xs">
-                                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 'BORRAR', 0, 'ACEPTAR'].map((btn) => (
+                        {step === 'qr' && (
+                            <div className="w-full h-full flex flex-col items-center justify-center relative animate-in fade-in">
+                                <h2 className="text-3xl font-black text-[#003366] italic mb-6 text-center leading-tight">{t('qr.title')} <br /> {t('qr.subtitle')}</h2>
+
+                                <div className="bg-white p-4 border-4 border-slate-200 rounded-3xl shadow-xl flex flex-col items-center">
+                                    {codigoToken ? (
+                                        <div className="p-2 border-4 border-[#003366] rounded-xl relative">
+                                            <QRCode value={codigoToken} size={220} fgColor="#003366" />
+                                            <div className="absolute top-0 left-0 w-full h-1.5 bg-[#f5d000] shadow-[0_0_15px_#f5d000] animate-bounce opacity-80 rounded-t-lg"></div>
+                                        </div>
+                                    ) : (
+                                        <div className="w-[220px] h-[220px] flex items-center justify-center bg-slate-100 rounded-xl">
+                                            <RefreshCw className="animate-spin text-slate-400" size={32} />
+                                        </div>
+                                    )}
+                                </div>
+                                <p className="mt-6 text-xl text-slate-500 font-bold">{t('qr.timeLeft')} <span className="text-red-600 font-mono font-black">{timeLeft}s</span></p>
+
+                                <div className="absolute bottom-4 right-4">
                                     <button
-                                        key={btn}
-                                        onClick={() => {
-                                            if (btn === 'ACEPTAR') solicitarRetiro();
-                                            else if (btn === 'BORRAR') borrarRetiro();
-                                            else agregarDigitoRetiro(btn);
-                                        }}
-                                        className={`h-10 rounded font-bold text-xs flex items-center justify-center active:scale-95 transition-all ${
-                                            btn === 'ACEPTAR' ? 'bg-green-500 text-white col-span-2' :
-                                                btn === 'BORRAR' ? 'bg-red-500 text-white col-span-2' :
-                                                    'bg-white text-slate-800 border border-slate-300'
-                                        }`}
+                                        onClick={reiniciarCajero}
+                                        className="bg-red-600 text-white px-8 py-3 rounded-xl font-bold text-lg shadow-md hover:bg-red-700 active:scale-95 transition-all flex items-center gap-2"
                                     >
-                                        {btn === 'BORRAR' ? <Delete size={14} /> : btn === 'ACEPTAR' ? '✓' : btn}
+                                        <Delete size={20} /> {t('qr.cancel')}
                                     </button>
-                                ))}
+                                </div>
                             </div>
+                        )}
 
-                            <button
-                                onClick={() => setStep('main_menu')}
-                                className="w-full max-w-xs bg-slate-800 text-white rounded-full py-2 font-bold hover:bg-slate-900 active:scale-95 transition-all"
-                            >
-                                {t('withdraw.return')}
-                            </button>
-                        </div>
-                    )}
+                        {step === 'pin' && (
+                            <div className="w-full h-full flex flex-col items-center justify-center relative animate-in slide-in-from-right">
+                                <h2 className="text-3xl font-black text-[#003366] italic mb-6">{t('pin.title')}</h2>
 
-                    {/* WITHDRAW PREVIEW */}
-                    {step === 'withdraw_preview' && retiroResultado && (
-                        <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-white overflow-y-auto">
-                            <h2 className="text-lg font-black text-slate-800 mb-3">{t('withdraw.confirm')}</h2>
-                            <p className="text-sm text-slate-600 mb-3">{t('withdraw.amount')} {retiroResultado.montoSolicitado}</p>
-
-                            <div className="w-full max-w-xs bg-slate-50 rounded-lg p-3 mb-4 max-h-40 overflow-y-auto border border-slate-200">
-                                {retiroResultado.detalles.map((detalle, idx) => (
-                                    <div key={idx} className="text-xs text-slate-700 mb-2 pb-2 border-b last:border-0">
-                                        <p className="font-bold">{detalle.cantidad} x Bs {detalle.denominacion}</p>
-                                        <p className="text-slate-500">{detalle.numerosSerie.slice(0, 2).join(', ')}...</p>
+                                {pinError && (
+                                    <div className="bg-red-100 text-red-600 px-4 py-2 rounded-lg font-bold mb-4 flex items-center gap-2 animate-in fade-in zoom-in">
+                                        <AlertCircle size={20} />
+                                        {pinError}
                                     </div>
-                                ))}
+                                )}
+
+                                <div className={`border-4 ${pinError ? 'border-red-400 bg-red-50' : 'border-slate-300 bg-slate-50'} px-12 py-4 rounded-lg shadow-inner mb-6 flex items-center justify-center w-64 h-20 transition-colors`}>
+                                    <span className={`text-5xl font-black ${pinError ? 'text-red-600' : 'text-[#003366]'} tracking-[0.3em] leading-none mt-4 transition-colors`}>
+                                        {pin.replace(/./g, '*')}
+                                    </span>
+                                </div>
+
+                                <div className="w-full max-w-lg ml-auto mr-12 flex justify-end mb-4">
+                                    <button onClick={validarPin} disabled={cargando} className="flex items-center gap-4 group">
+                                        <span className="text-2xl font-bold text-slate-500 italic group-hover:text-[#003366] transition-colors">{cargando ? '...' : t('pin.continue')}</span>
+                                        <div className="w-16 h-10 bg-[#003366] rounded-full shadow-inner group-hover:bg-[#f5d000] transition-colors border-2 border-slate-200"></div>
+                                    </button>
+                                </div>
+
+                                <div className="grid grid-cols-4 gap-3 bg-slate-100 p-4 rounded-2xl shadow-lg border border-slate-200">
+                                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 'BORRAR', 0, 'ACEPTAR'].map((btn) => (
+                                        <button
+                                            key={btn}
+                                            onClick={() => {
+                                                if (btn === 'ACEPTAR') validarPin();
+                                                else if (btn === 'BORRAR') setPin('');
+                                                else addNumber(btn);
+                                            }}
+                                            className={`h-12 w-16 rounded-lg font-black text-xl flex items-center justify-center active:scale-95 border-b-4 transition-all shadow-sm ${
+                                                btn === 'ACEPTAR' ? 'bg-green-500 text-white border-green-700 col-span-2 w-full text-lg hover:bg-green-600' :
+                                                btn === 'BORRAR' ? 'bg-red-500 text-white border-red-700 col-span-2 w-full text-lg hover:bg-red-600' :
+                                                'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                                            }`}
+                                        >
+                                            {btn === 'BORRAR' ? <Delete size={20} /> : btn === 'ACEPTAR' ? '✓' : btn}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                <div className="absolute bottom-4 left-4">
+                                    <button onClick={reiniciarCajero} className="bg-red-600 text-white px-6 py-3 rounded-xl font-bold text-lg shadow-md hover:bg-red-700 active:scale-95 transition-all">
+                                        {t('common.cancel')}
+                                    </button>
+                                </div>
                             </div>
+                        )}
 
-                            <div className="flex gap-2 w-full max-w-xs">
+                        {step === 'main_menu' && (
+                            <div className="w-full h-full flex flex-col items-center justify-center animate-in zoom-in-95">
+                                <h2 className="text-3xl font-black text-[#003366] italic mb-2 text-center">{t('menu.title')}</h2>
+                                <p className="text-lg text-slate-500 font-semibold mb-8">{t('menu.subtitle')}</p>
+
+                                <div className="grid grid-cols-2 gap-6 w-full max-w-4xl px-8">
+                                    <button onClick={abrirRetiro} className="bg-white border-4 border-slate-200 hover:border-[#003366] h-32 rounded-2xl shadow-md flex flex-col items-center justify-center gap-2 group active:scale-95 transition-all overflow-hidden relative">
+                                        <div className="absolute inset-0 bg-blue-50/50 -z-10 transition-colors group-hover:bg-blue-50"></div>
+                                        <DollarSign size={40} className="text-slate-400 group-hover:text-[#003366] transition-colors" />
+                                        <span className="text-xl font-bold text-[#003366]">{t('menu.withdraw')}</span>
+                                    </button>
+
+                                    <button onClick={() => setStep('validator')} className="bg-white border-4 border-slate-200 hover:border-[#003366] h-32 rounded-2xl shadow-md flex flex-col items-center justify-center gap-2 group active:scale-95 transition-all overflow-hidden relative">
+                                        <div className="absolute inset-0 bg-gray-50/50 -z-10 transition-colors group-hover:bg-gray-50"></div>
+                                        <Camera size={40} className="text-slate-400 group-hover:text-[#003366] transition-colors" />
+                                        <span className="text-xl font-bold text-[#003366]">{t('menu.validator')}</span>
+                                    </button>
+
+                                    <button onClick={() => mostrarOpcionEnDesarrollo('Consulta de Saldo')} className="bg-white border-4 border-slate-200 hover:border-[#003366] h-32 rounded-2xl shadow-md flex flex-col items-center justify-center gap-2 group active:scale-95 transition-all overflow-hidden relative">
+                                        <div className="absolute inset-0 bg-gray-50/50 -z-10 transition-colors group-hover:bg-gray-50"></div>
+                                        <Wallet size={40} className="text-slate-400 group-hover:text-[#003366] transition-colors" />
+                                        <span className="text-xl font-bold text-[#003366]">{t('menu.statement')}</span>
+                                    </button>
+
+                                    <button onClick={() => mostrarOpcionEnDesarrollo('Consulta de Movimientos')} className="bg-white border-4 border-slate-200 hover:border-[#003366] h-32 rounded-2xl shadow-md flex flex-col items-center justify-center gap-2 group active:scale-95 transition-all overflow-hidden relative">
+                                        <div className="absolute inset-0 bg-gray-50/50 -z-10 transition-colors group-hover:bg-gray-50"></div>
+                                        <FileText size={40} className="text-slate-400 group-hover:text-[#003366] transition-colors" />
+                                        <span className="text-xl font-bold text-[#003366]">{t('menu.transfer')}</span>
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {step === 'validator' && (
+                            <div className="w-full h-full flex flex-col items-center justify-center animate-in fade-in absolute inset-0 z-50 bg-[#001a33]/95 rounded-xl">
+                                <DetectorBilletes onClose={() => setStep('main_menu')} />
+                            </div>
+                        )}
+
+                        {step === 'timeout' && (
+                            <div className="w-full h-full flex flex-col items-center justify-center animate-in fade-in">
+                                <AlertCircle size={80} className="text-red-500 mb-6 animate-bounce" />
+                                <h2 className="text-4xl font-black text-[#003366] italic mb-4">{t('timeout.title')}</h2>
                                 <button
-                                    onClick={cancelarRetiro}
-                                    className="flex-1 bg-red-600 text-white rounded-lg py-2 font-bold hover:bg-red-700 active:scale-95 transition-all text-sm"
+                                    onClick={reiniciarCajero}
+                                    className="mt-6 bg-[#003366] text-white px-8 py-4 rounded-xl font-bold text-xl flex items-center gap-3 shadow-lg hover:bg-blue-900 active:scale-95 transition-all"
                                 >
-                                    {t('common.cancel')}
-                                </button>
-                                <button
-                                    onClick={confirmarRetiro}
-                                    disabled={cargando}
-                                    className="flex-1 bg-green-600 text-white rounded-lg py-2 font-bold hover:bg-green-700 active:scale-95 transition-all text-sm disabled:opacity-50"
-                                >
-                                    {cargando ? '...' : t('withdraw.confirmBtn')}
+                                    <ArrowLeft size={24} /> {t('timeout.back')}
                                 </button>
                             </div>
-                        </div>
-                    )}
+                        )}
 
-                    {/* WITHDRAW SUCCESS */}
-                    {step === 'withdraw_success' && retiroResultado && (
-                        <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-white">
-                            <DollarSign size={48} className="text-green-600 mb-2" />
-                            <h2 className="text-3xl font-black text-green-600 mb-1">{t('withdraw.success')}</h2>
-                            <p className="text-sm text-slate-600 mb-4">{t('withdraw.amount')} {retiroResultado.montoDispensado}</p>
+                        {step === 'withdraw_amount' && (
+                            <div className="w-full h-full flex flex-col items-center justify-center animate-in fade-in relative">
 
-                            <div className="w-full max-w-xs bg-slate-50 rounded-lg p-3 mb-4 max-h-40 overflow-y-auto border border-slate-200">
-                                {retiroResultado.detalles.map((detalle, idx) => (
-                                    <div key={idx} className="text-xs text-slate-700 mb-2 pb-2 border-b last:border-0">
-                                        <p className="font-bold">{detalle.cantidad} x Bs {detalle.denominacion}</p>
+                                <h2 className="text-3xl font-black text-[#003366] italic mb-1 mt-2">{t('withdraw.title')}</h2>
+                                <p className="text-slate-500 font-semibold mb-3">{t('withdraw.subtitle')}</p>
+
+                                <div className="border-4 border-slate-300 bg-slate-50 px-12 py-3 rounded-lg shadow-inner mb-3 flex items-center justify-center w-72 h-16 shrink-0 relative">
+                                    <span className="text-4xl font-black text-[#003366]">
+                                        Bs {retiroMonto || '0'}
+                                    </span>
+                                </div>
+
+                                <div className="flex gap-3 mb-3">
+                                    {[50, 100, 200, 500].map(valor => (
+                                        <button
+                                            key={valor}
+                                            onClick={() => setRetiroMonto(String(valor))}
+                                            className="bg-white border-2 border-slate-300 px-5 py-2 rounded-xl font-black text-[#003366] hover:bg-slate-50 active:scale-95 transition-all"
+                                        >
+                                            Bs {valor}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                <div className="relative p-1">
+                                    {retiroError && (
+                                        <div className="absolute -top-10 left-1/2 -translate-x-1/2 w-auto whitespace-nowrap bg-red-100 text-red-600 px-6 py-2 rounded-full font-bold shadow-2xl border border-red-300 z-50 animate-in slide-in-from-top-4">
+                                            {retiroError}
+                                        </div>
+                                    )}
+
+                                    <div className="grid grid-cols-3 gap-3 bg-slate-100 p-4 rounded-2xl shadow-lg border border-slate-200">
+                                        {[1,2,3,4,5,6,7,8,9,'BORRAR',0,'ACEPTAR'].map((btn) => (
+                                            <button
+                                                key={btn}
+                                                onClick={() => {
+                                                    if (btn === 'ACEPTAR') solicitarRetiro();
+                                                    else if (btn === 'BORRAR') borrarRetiro();
+                                                    else agregarDigitoRetiro(btn);
+                                                }}
+                                                className={`h-10 w-20 rounded-lg font-black text-xl flex items-center justify-center active:scale-95 border-b-4 transition-all shadow-sm ${
+                                                    btn === 'ACEPTAR'
+                                                        ? 'bg-green-500 text-white border-green-700 hover:bg-green-600'
+                                                        : btn === 'BORRAR'
+                                                            ? 'bg-red-500 text-white border-red-700 hover:bg-red-600'
+                                                            : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                                                }`}
+                                            >
+                                                {btn === 'BORRAR' ? <Delete size={20} /> : btn === 'ACEPTAR' ? '✓' : btn}
+                                            </button>
+                                        ))}
                                     </div>
-                                ))}
-                            </div>
+                                </div>
 
-                            <button
-                                onClick={volverAlMenuTrasRetiro}
-                                className="w-full max-w-xs bg-blue-600 text-white rounded-full py-2 font-bold hover:bg-blue-700 active:scale-95 transition-all"
-                            >
-                                {t('withdraw.back')}
-                            </button>
-                        </div>
-                    )}
+                                <div className="absolute bottom-4 left-4">
+                                    <button onClick={() => setStep('main_menu')} className="bg-[#003366] text-white px-6 py-3 rounded-xl font-bold text-lg shadow-md hover:bg-blue-900 active:scale-95 transition-all">
+                                        {t('common.back')}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {step === 'withdraw_preview' && retiroResultado && (
+                            <div className="w-full h-full flex flex-col items-center justify-center animate-in fade-in px-10 relative">
+                                <h2 className="text-3xl font-black text-[#003366] italic mb-3 mt-4">{t('withdraw.confirm')}</h2>
+                                <p className="text-slate-500 font-semibold mb-6">
+                                    {t('withdraw.amount')} {retiroResultado.montoSolicitado}
+                                </p>
+
+                                <div className="w-full max-w-3xl bg-white border-2 border-slate-200 rounded-2xl shadow-lg p-6 space-y-4 overflow-y-auto max-h-64 mb-6">
+                                    {retiroResultado.detalles.map((detalle, index) => (
+                                        <div key={index} className="border border-slate-200 rounded-xl p-4 transition-colors hover:border-[#003366]/30 hover:bg-blue-50/50 relative overflow-hidden">
+                                            <div className="absolute inset-0 -z-10 bg-white transition-colors"></div>
+                                            <div className="flex justify-between items-center mb-2">
+                                                <span className="font-black text-[#003366] text-lg">
+                                                    {detalle.cantidad} x Bs {detalle.denominacion}
+                                                </span>
+                                                <span className="text-slate-500 font-bold">
+                                                    Caseta #{detalle.idCaseta}
+                                                </span>
+                                            </div>
+
+                                            <div className="flex flex-wrap gap-2">
+                                                {detalle.numerosSerie.map((serie) => (
+                                                    <span key={serie} className="px-3 py-1 bg-slate-100 border border-slate-300 rounded-full text-xs font-mono text-slate-700 transition-colors hover:bg-slate-200">
+                                                        {serie}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <div className="flex gap-4 mt-8">
+                                    <button
+                                        onClick={cancelarRetiro}
+                                        className="bg-red-600 text-white px-8 py-3 rounded-xl font-bold shadow-md hover:bg-red-700 active:scale-95 transition-all"
+                                    >
+                                        {t('common.cancel')}
+                                    </button>
+
+                                    <button
+                                        onClick={confirmarRetiro}
+                                        disabled={cargando}
+                                        className="bg-[#003366] text-white px-8 py-3 rounded-xl font-bold shadow-md hover:bg-blue-900 active:scale-95 transition-all disabled:opacity-50"
+                                    >
+                                        {cargando ? '...' : t('withdraw.confirmBtn')}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {step === 'withdraw_success' && retiroResultado && (
+                            <div className="w-full h-full flex flex-col items-center justify-center animate-in zoom-in-95 px-10 relative">
+                                <DollarSign size={70} className="text-green-600 mb-4 mt-4" />
+                                <h2 className="text-4xl font-black text-[#003366] italic mb-2">{t('withdraw.success')}</h2>
+                                <p className="text-xl text-slate-600 font-semibold mb-6">
+                                    {t('withdraw.dispensed')} {t('withdraw.amount')} {retiroResultado.montoDispensado}
+                                </p>
+
+                                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 w-full max-w-2xl overflow-y-auto max-h-48 mb-6 relative">
+                                    <div className="absolute inset-0 bg-white -z-10 transition-colors"></div>
+                                    <h3 className="text-lg font-black text-[#003366] mb-3">{t('withdraw.delivered')}</h3>
+                                    <div className="space-y-3">
+                                        {retiroResultado.detalles.map((detalle, index) => (
+                                            <div key={index} className="flex justify-between border-b border-slate-200 pb-2 last:border-0 hover:bg-slate-100/50 rounded-lg p-1">
+                                                <span className="font-bold text-slate-700">
+                                                    {detalle.cantidad} x Bs {detalle.denominacion}
+                                                </span>
+                                                <span className="text-slate-500 text-xs text-right max-w-[50%]">
+                                                    {detalle.numerosSerie.join(', ')}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <button
+                                    onClick={volverAlMenuTrasRetiro}
+                                    className="mt-8 bg-[#003366] text-white px-8 py-4 rounded-xl font-bold text-xl shadow-lg hover:bg-blue-900 active:scale-95 transition-all"
+                                >
+                                    {t('withdraw.back')}
+                                </button>
+                            </div>
+                        )}
+                    </main>
                 </div>
 
-                {/* Slot para dinero */}
-                <div className="w-12 h-full bg-black border-l border-slate-700 flex flex-col justify-around py-2">
-                    <div className="w-16 h-4 bg-slate-600 rounded-full"></div>
-                    <div className="w-16 h-4 bg-slate-600 rounded-full"></div>
+                <div className="absolute bottom-4 w-full flex justify-around px-32">
+                    <div className="w-48 h-8 bg-black rounded-full shadow-[0_5px_15px_rgba(0,0,0,0.5)] border-4 border-gray-600"></div>
+                    <div className="w-48 h-8 bg-black rounded-full shadow-[0_5px_15px_rgba(0,0,0,0.5)] border-4 border-gray-600 relative overflow-hidden">
+                        <div className="absolute top-0 left-0 w-full h-full bg-green-500/20 animate-pulse"></div>
+                    </div>
                 </div>
             </div>
         </div>

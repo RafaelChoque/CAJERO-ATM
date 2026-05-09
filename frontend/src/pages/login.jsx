@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Lock, User, Eye, EyeOff } from 'lucide-react'; // Añadimos Eye y EyeOff
+import { Lock, User, Eye, EyeOff } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import logoBisa from '../assets/logo-bisa.png';
@@ -7,8 +7,8 @@ import logoBisa from '../assets/logo-bisa.png';
 const LoginAdmin = () => {
     const [credentials, setCredentials] = useState({ username: '', password: '' });
     const [error, setError] = useState('');
-    const [cargando, setCargando] = useState(false); // Añadimos estado de carga
-    const [mostrarPassword, setMostrarPassword] = useState(false); // Estado para el ojo
+    const [cargando, setCargando] = useState(false);
+    const [mostrarPassword, setMostrarPassword] = useState(false);
     const navigate = useNavigate();
 
     const { login } = useAuth();
@@ -20,15 +20,16 @@ const LoginAdmin = () => {
     const handleLogin = async (e) => {
         e.preventDefault();
         setError('');
-        setCargando(true); // Iniciamos la animación del botón
+        setCargando(true);
 
         const result = await login(credentials.username, credentials.password);
 
         if (result.success) {
-            navigate('/admin/dashboard');
+            // AQUÍ ESTÁ LA CORRECCIÓN: Usamos la ruta que nos manda el backend
+            navigate(result.redirect);
         } else {
             setError('Acceso denegado: Credenciales inválidas o servidor apagado');
-            setCargando(false); // Detenemos la animación si hay error
+            setCargando(false);
         }
     };
 

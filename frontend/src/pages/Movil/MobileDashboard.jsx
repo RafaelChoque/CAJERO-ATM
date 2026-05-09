@@ -13,9 +13,11 @@ import L from 'leaflet';
 import { Html5Qrcode } from 'html5-qrcode';
 import { useAuth } from '../../context/AuthContext';
 import DetectorBilletes from '../../components/DetectorBilletes';
+import { useTranslation } from 'react-i18next';
 
 import SockJS from 'sockjs-client';
 import Stomp from 'stompjs';
+import QRCode from 'react-qr-code';
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -29,33 +31,34 @@ const CustomQrScanner = ({ onScanSuccess }) => {
     useEffect(() => {
         const html5QrCode = new Html5Qrcode("reader");
 
+        const handleSuccess = (decodedText) => {
+            if (html5QrCode.isScanning) {
+                html5QrCode.stop().then(() => {
+                    try { html5QrCode.clear(); } catch(e) {}
+                    onScanSuccess(decodedText);
+                }).catch(() => {});
+            }
+        };
+
         html5QrCode.start(
             { facingMode: "environment" },
             { fps: 10, qrbox: { width: 250, height: 250 } },
-            (decodedText) => {
-                html5QrCode.stop().then(() => {
-                    html5QrCode.clear();
-                    onScanSuccess(decodedText);
-                }).catch(console.error);
-            },
-            (errorMessage) => {}
-        ).catch((err) => {
+            handleSuccess,
+            () => {}
+        ).catch(() => {
             html5QrCode.start(
                 { facingMode: "user" },
                 { fps: 10, qrbox: { width: 250, height: 250 } },
-                (decodedText) => {
-                    html5QrCode.stop().then(() => {
-                        html5QrCode.clear();
-                        onScanSuccess(decodedText);
-                    }).catch(console.error);
-                },
-                (errorMessage) => {}
+                handleSuccess,
+                () => {}
             ).catch(console.error);
         });
 
         return () => {
             if (html5QrCode.isScanning) {
-                html5QrCode.stop().then(() => html5QrCode.clear()).catch(console.error);
+                html5QrCode.stop().then(() => {
+                    try { html5QrCode.clear(); } catch(e) {}
+                }).catch(() => {});
             }
         };
     }, [onScanSuccess]);
@@ -66,6 +69,7 @@ const CustomQrScanner = ({ onScanSuccess }) => {
 const MobileDashboard = () => {
     const navigate = useNavigate();
     const { apiCall, cerrarSesionCliente } = useAuth();
+    const { t, i18n } = useTranslation();
 
     const [view, setView] = useState('home');
     const [clienteAuth, setClienteAuth] = useState(null);
@@ -76,6 +80,7 @@ const MobileDashboard = () => {
     const [mostrarSaldo, setMostrarSaldo] = useState(true);
     const [cajerosUbicaciones, setCajerosUbicaciones] = useState([]);
     const [transacciones, setTransacciones] = useState([]);
+    const [transferenciaMonto, setTransferenciaMonto] = useState('');
 
     useEffect(() => {
         const dataStr = localStorage.getItem('cliente_auth');
@@ -105,12 +110,19 @@ const MobileDashboard = () => {
         stompClient.debug = null;
 
         stompClient.connect({}, () => {
-            stompClient.subscribe(`/topic/seguridad/${clienteAuth.idCuenta}`, async (mensaje) => {
+            stompClient.subscribe(`/topic/seguridad/${clienteAuth.idUsuario}`, async (mensaje) => {
                 const data = JSON.parse(mensaje.body);
+
+                if (data.accion === 'DISPOSITIVO_BLOQUEADO') {
+                    stompClient.disconnect();
+                    showError("⛔ DISPOSITIVO BLOQUEADO", data.mensaje);
+                    cerrarSesionCliente();
+                    return;
+                }
 
                 if (data.accion === 'CERRAR_SESION') {
                     stompClient.disconnect();
-                    showError("Bloqueo de Seguridad", data.motivo);
+                    showError("🔒 Bloqueo de Seguridad", data.motivo);
                     cerrarSesionCliente();
                     return;
                 }
@@ -265,9 +277,19 @@ const MobileDashboard = () => {
                         {/* tarjeta saldo y cabecera */}
                         <div className="bg-white px-5 pt-12 pb-6 relative">
                             <div className="flex justify-between items-center mb-6">
-                                <div><h1 className="text-xl font-black text-slate-800 tracking-tight">Mi Producto</h1></div>
-                                <div className="flex gap-4 text-[#003366]">
-                                    <MapPin size={22} className="cursor-pointer active:scale-95 transition-transform" onClick={() => setView('mapa')} />
+                                <div><h1 className="text-xl font-black text-slate-800 tracking-tight">{t('mobile.dashboard.product')}</h1></div>
+                                <div className="flex gap-3 text-[#003366] items-center">
+                                    {/* Botón para cambiar idioma */}
+                                    <button
+                                        onClick={() => {
+                                            const nextLang = i18n.language === 'es' ? 'en' : 'es';
+                                            i18n.changeLanguage(nextLang);
+                                            localStorage.setItem('idioma', nextLang);
+                                        }}
+                                        className="w-10 h-10 flex items-center justify-center bg-[#003366] text-white rounded-full font-black text-xs shadow-lg hover:bg-blue-800 active:scale-95 transition-all border-2 border-white"
+                                    >
+                                        {i18n.language === 'es' ? 'EN' : 'ES'}
+                                    </button>
                                     <LogOut size={22} className="cursor-pointer active:scale-95 transition-transform" onClick={handleLogout} />
                                 </div>
                             </div>
@@ -276,7 +298,7 @@ const MobileDashboard = () => {
                                 <div className="absolute top-0 right-0 w-48 h-48 bg-white/5 rounded-full -mr-10 -mt-10 blur-2xl"></div>
                                 <div className="flex justify-between items-start mb-6 relative z-10">
                                     <div>
-                                        <p className="text-white font-bold text-sm tracking-wide">Caja de Ahorro</p>
+                                        <p className="text-white font-bold text-sm tracking-wide">{t('mobile.dashboard.savings_account')}</p>
                                         <p className="text-blue-200 text-xs font-mono mt-0.5 tracking-widest">
                                             {mostrarSaldo ? cuentaOculta : '**** **** ****'}
                                         </p>
@@ -289,7 +311,7 @@ const MobileDashboard = () => {
                                 </div>
                                 <div className="flex justify-between items-end relative z-10">
                                     <div>
-                                        <p className="text-blue-200 text-[11px] mb-1 uppercase tracking-wider font-semibold">Saldo Disponible</p>
+                                        <p className="text-blue-200 text-[11px] mb-1 uppercase tracking-wider font-semibold">{t('mobile.dashboard.balance')}</p>
                                         <h2 className="text-3xl font-black text-white tracking-tight">
                                             {mostrarSaldo ? <>{clienteAuth.moneda} {clienteAuth.saldo}</> : <span className="text-2xl tracking-[0.2em]">***.**</span>}
                                         </h2>
@@ -310,35 +332,35 @@ const MobileDashboard = () => {
                                     <div className="w-14 h-14 rounded-full bg-white border border-slate-200 shadow-sm flex items-center justify-center text-[#004a8e] group-hover:bg-[#004a8e] group-hover:text-white group-active:scale-95 transition-all">
                                         <Smartphone size={24} />
                                     </div>
-                                    <span className="text-[10px] font-bold text-slate-600 text-center leading-tight">Acceso<br/>Cajero QR</span>
+                                    <span className="text-[10px] font-bold text-slate-600 text-center leading-tight">{t('mobile.dashboard.access_atm')}</span>
                                 </button>
                                 {/* btn oara ver cajeros en mapa */}
                                 <button onClick={() => setView('mapa')} className="flex flex-col items-center gap-2 group flex-1">
                                     <div className="w-14 h-14 rounded-full bg-white border border-slate-200 shadow-sm flex items-center justify-center text-[#004a8e] group-hover:bg-[#004a8e] group-hover:text-white group-active:scale-95 transition-all">
                                         <MapPin size={24} />
                                     </div>
-                                    <span className="text-[10px] font-bold text-slate-600 text-center leading-tight">ATMs<br/>Cercanos</span>
+                                    <span className="text-[10px] font-bold text-slate-600 text-center leading-tight">{t('mobile.dashboard.nearby_atms')}</span>
                                 </button>
-                                {/* btn aun en desarrollo */}
-                                <button onClick={() => showError("Opción en desarrollo", "Esta función estará disponible próximamente.")} className="flex flex-col items-center gap-2 group flex-1 opacity-60">
-                                    <div className="w-14 h-14 rounded-full bg-white border border-slate-200 shadow-sm flex items-center justify-center text-[#004a8e] active:scale-95 transition-all">
+                                {/* btn de transferencias */}
+                                <button onClick={() => setView('transferencias')} className="flex flex-col items-center gap-2 group flex-1">
+                                    <div className="w-14 h-14 rounded-full bg-white border border-slate-200 shadow-sm flex items-center justify-center text-[#004a8e] group-hover:bg-[#004a8e] group-hover:text-white group-active:scale-95 transition-all">
                                         <Send size={24} />
                                     </div>
-                                    <span className="text-[10px] font-bold text-slate-600 text-center leading-tight">Transferir<br/>Dinero</span>
+                                    <span className="text-[10px] font-bold text-slate-600 text-center leading-tight">{t('mobile.dashboard.send_money')}</span>
                                 </button>
                                 {/* btn de validar billetes */}
                                 <button onClick={() => setView('validador')} className="flex flex-col items-center gap-2 group flex-1">
                                     <div className="w-14 h-14 rounded-full bg-[#004a8e] border border-[#004a8e] shadow-md flex items-center justify-center text-[#f5d000] active:scale-95 transition-transform">
                                         <Camera size={24} />
                                     </div>
-                                    <span className="text-[10px] font-bold text-[#004a8e] text-center leading-tight">Validar<br/>Billete BCB</span>
+                                    <span className="text-[10px] font-bold text-[#004a8e] text-center leading-tight">{t('mobile.dashboard.validate_bill')}</span>
                                 </button>
                             </div>
                         </div>
                         {/* listado de transacciones recientes */}
                         <div className="px-5 mt-6">
                             <div className="flex justify-between items-center mb-4">
-                                <h3 className="text-slate-800 font-bold text-[15px] flex items-center gap-2">Últimos movimientos</h3>
+                                <h3 className="text-slate-800 font-bold text-[15px] flex items-center gap-2">{t('mobile.dashboard.recent_movements')}</h3>
                             </div>
                             <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-1">
                                 {transacciones.length > 0 ? (
@@ -347,7 +369,22 @@ const MobileDashboard = () => {
                                             <div className="flex items-center gap-3">
                                                 <div className={`w-10 h-10 rounded-full flex items-center justify-center ${tx.monto < 0 ? 'bg-red-50 text-red-500' : 'bg-blue-50 text-[#004a8e]'}`}><FileText size={18} /></div>
                                                 <div>
-                                                    <p className="font-bold text-sm text-slate-800">{tx.tipoTransaccion || 'Transacción'}</p>
+                                                    <p className="font-bold text-sm text-slate-800">
+                                                        {tx.tipoTransaccion
+                                                            ? (() => {
+                                                                const tipo = tx.tipoTransaccion.toLowerCase().replace(/\s+/g, '_');
+                                                                const traducc = {
+                                                                    'deposito': t('mobile.dashboard.transaction_type.deposito'),
+                                                                    'deposito_inicial': t('mobile.dashboard.transaction_type.deposito_inicial'),
+                                                                    'retiro': t('mobile.dashboard.transaction_type.retiro'),
+                                                                    'transferencia': t('mobile.dashboard.transaction_type.transferencia'),
+                                                                    'pago': t('mobile.dashboard.transaction_type.pago')
+                                                                };
+                                                                return traducc[tipo] || tipo;
+                                                            })()
+                                                            : t('mobile.dashboard.transaction')
+                                                        }
+                                                    </p>
                                                     <p className="text-[10px] text-slate-500 truncate w-32">{tx.numeroReferencia}</p>
                                                 </div>
                                             </div>
@@ -363,9 +400,9 @@ const MobileDashboard = () => {
                         </div>
                         {/* barra de navegacion */}
                         <div className="absolute bottom-0 w-full bg-white/90 backdrop-blur-md border-t border-slate-100 flex justify-around items-center py-3 text-slate-400 pb-5 sm:pb-3 rounded-b-[2.5rem] z-50">
-                            <button className="flex flex-col items-center text-[#004a8e]"><Home size={24} className="mb-1" /><span className="text-[10px] font-bold">Inicio</span></button>
+                            <button className="flex flex-col items-center text-[#004a8e]"><Home size={24} className="mb-1" /><span className="text-[10px] font-bold">{t('mobile.dashboard.home')}</span></button>
                             <button onClick={() => setView('scanner')} className="relative -top-5 w-14 h-14 bg-[#004a8e] text-[#f5d000] rounded-full shadow-[0_8px_15px_rgba(0,74,142,0.3)] flex items-center justify-center border-4 border-slate-50 active:scale-95 transition-transform"><QrCode size={26} /></button>
-                            <button onClick={() => setView('mapa')} className="flex flex-col items-center hover:text-[#004a8e] transition-colors"><MapPin size={24} className="mb-1" /><span className="text-[10px] font-bold">Cajeros</span></button>
+                            <button onClick={() => setView('mapa')} className="flex flex-col items-center hover:text-[#004a8e] transition-colors"><MapPin size={24} className="mb-1" /><span className="text-[10px] font-bold">{t('mobile.dashboard.atms')}</span></button>
                         </div>
                     </div>
                 )}
@@ -415,6 +452,193 @@ const MobileDashboard = () => {
                             </div>
 
                             <p className="text-blue-100 text-center text-sm font-medium px-4 mb-6">Apunta al QR del Cajero Automático.</p>
+                        </div>
+                    </div>
+                )}
+                {/* Vista de Transferencias */}
+                {view === 'transferencias' && (
+                    <div className="flex-1 bg-gradient-to-b from-slate-50 to-white flex flex-col animate-in slide-in-from-right duration-300">
+                        <div className="pt-12 px-4 flex items-center justify-between mb-6">
+                            <button onClick={() => setView('home')} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+                                <ArrowLeft size={24} className="text-[#004a8e]" />
+                            </button>
+                            <span className="font-black text-lg text-[#004a8e] tracking-tight">Transferencias</span>
+                            <div className="w-10"></div>
+                        </div>
+
+                        <div className="flex-1 flex flex-col items-center justify-center px-4 gap-6">
+                            <p className="text-slate-600 text-center font-semibold">¿Qué deseas hacer?</p>
+
+                            {/* Botón RECIBIR */}
+                            <button
+                                onClick={() => setView('transferencias-recibir')}
+                                className="w-full max-w-sm bg-gradient-to-br from-[#004a8e] to-[#003366] text-white p-6 rounded-3xl shadow-lg hover:shadow-xl active:scale-95 transition-all border border-blue-400/30"
+                            >
+                                <div className="flex items-center gap-4">
+                                    <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
+                                        <Send size={24} />
+                                    </div>
+                                    <div className="text-left">
+                                        <p className="font-black text-lg">RECIBIR</p>
+                                        <p className="text-sm text-blue-200">Genera QR para recibir dinero</p>
+                                    </div>
+                                </div>
+                            </button>
+
+                            {/* Botón ENVIAR */}
+                            <button
+                                onClick={() => setView('transferencias-enviar')}
+                                className="w-full max-w-sm bg-gradient-to-br from-[#f5d000] to-[#e5c100] text-[#003366] p-6 rounded-3xl shadow-lg hover:shadow-xl active:scale-95 transition-all border border-yellow-400/30"
+                            >
+                                <div className="flex items-center gap-4">
+                                    <div className="w-12 h-12 bg-[#003366]/20 rounded-full flex items-center justify-center">
+                                        <Send size={24} />
+                                    </div>
+                                    <div className="text-left">
+                                        <p className="font-black text-lg">ENVIAR</p>
+                                        <p className="text-sm text-[#003366]/70">Escanea QR para enviar dinero</p>
+                                    </div>
+                                </div>
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {/* Vista RECIBIR - Genera QR */}
+                {view === 'transferencias-recibir' && (
+                    <div className="flex-1 bg-gradient-to-b from-slate-50 to-white flex flex-col animate-in slide-in-from-right duration-300">
+                        <div className="pt-12 px-4 flex items-center justify-between mb-6">
+                            <button onClick={() => setView('transferencias')} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+                                <ArrowLeft size={24} className="text-[#004a8e]" />
+                            </button>
+                            <span className="font-black text-lg text-[#004a8e]">Mi QR</span>
+                            <div className="w-10"></div>
+                        </div>
+
+                        <div className="flex-1 flex flex-col items-center justify-center px-4 gap-4">
+                            <p className="text-slate-600 text-center font-semibold">Otros pueden escanearte para enviarte dinero</p>
+
+                            <div className="bg-white p-8 rounded-3xl shadow-xl border-2 border-slate-200">
+                                <QRCode
+                                    value={clienteAuth?.idCuenta?.toString() || ''}
+                                    size={256}
+                                    fgColor="#004a8e"
+                                    bgColor="#ffffff"
+                                />
+                            </div>
+
+                            <p className="text-sm text-slate-500 text-center">
+                                Caja de ahorro<br/>
+                                <span className="font-bold text-[#004a8e]">{cuentaOculta}</span>
+                            </p>
+
+                            <button
+                                onClick={() => {
+                                    showSuccess("QR Compartido", "Enviado al portapapeles");
+                                    navigator.clipboard.writeText(clienteAuth?.idCuenta?.toString());
+                                }}
+                                className="w-full max-w-sm bg-[#004a8e] text-white py-3 rounded-xl font-bold hover:bg-[#003366] active:scale-95 transition-all mt-4"
+                            >
+                                Copiar ID de Cuenta
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {/* Vista ENVIAR - Escanea QR */}
+                {view === 'transferencias-enviar' && (
+                    <div className="flex-1 bg-slate-900 flex flex-col animate-in slide-in-from-bottom duration-300 relative overflow-hidden">
+                        <div className="pt-12 px-4 flex items-center justify-between text-white mb-6 relative z-10">
+                            <button onClick={() => setView('transferencias')} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+                                <ArrowLeft size={24} />
+                            </button>
+                            <span className="font-black tracking-widest text-sm text-[#f5d000]">ESCANEAR QR</span>
+                            <div className="w-10"></div>
+                        </div>
+
+                        <div className="flex-1 flex flex-col items-center px-4 relative z-10 w-full">
+                            <div className="w-full max-w-[280px] aspect-square rounded-[2rem] overflow-hidden border-4 border-[#f5d000] shadow-[0_0_30px_rgba(245,208,0,0.3)] bg-black relative mb-6 flex justify-center items-center">
+                                <CustomQrScanner onScanSuccess={(codigo) => {
+                                    setView('transferencias-monto');
+                                    setScannedCode(codigo);
+                                }} />
+
+                                <div className="absolute inset-0 pointer-events-none z-20">
+                                    <div className="absolute top-4 left-4 w-8 h-8 border-t-4 border-l-4 border-white/80 rounded-tl-xl"></div>
+                                    <div className="absolute top-4 right-4 w-8 h-8 border-t-4 border-r-4 border-white/80 rounded-tr-xl"></div>
+                                    <div className="absolute bottom-4 left-4 w-8 h-8 border-b-4 border-l-4 border-white/80 rounded-bl-xl"></div>
+                                    <div className="absolute bottom-4 right-4 w-8 h-8 border-b-4 border-r-4 border-white/80 rounded-br-xl"></div>
+                                    <div className="absolute top-1/2 left-0 w-full h-0.5 bg-red-500/50 shadow-[0_0_10px_red] animate-pulse"></div>
+                                </div>
+                            </div>
+
+                            <p className="text-blue-100 text-center text-sm font-medium px-4">Escanea el QR de quien recibirá el dinero.</p>
+                        </div>
+                    </div>
+                )}
+
+                {/* Vista MONTO - Ingresar cantidad */}
+                {view === 'transferencias-monto' && (
+                    <div className="flex-1 bg-gradient-to-b from-slate-50 to-white flex flex-col animate-in slide-in-from-right duration-300">
+                        <div className="pt-12 px-4 flex items-center justify-between mb-6">
+                            <button onClick={() => setView('transferencias-enviar')} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+                                <ArrowLeft size={24} className="text-[#004a8e]" />
+                            </button>
+                            <span className="font-black text-lg text-[#004a8e]">Ingresar Monto</span>
+                            <div className="w-10"></div>
+                        </div>
+
+                        <div className="flex-1 flex flex-col items-center justify-center px-4 gap-6">
+                            <div className="w-full max-w-sm">
+                                <label className="text-sm font-bold text-slate-600 mb-2 block">Monto a transferir</label>
+                                <div className="relative">
+                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-2xl font-black text-[#004a8e]">{clienteAuth?.moneda}</span>
+                                    <input
+                                        type="number"
+                                        placeholder="0.00"
+                                        value={transferenciaMonto}
+                                        onChange={(e) => setTransferenciaMonto(e.target.value)}
+                                        className="w-full pl-12 pr-4 py-4 border-2 border-slate-300 rounded-xl text-2xl font-black text-[#004a8e] focus:outline-none focus:border-[#004a8e]"
+                                    />
+                                </div>
+                            </div>
+
+                            <button
+                                onClick={async () => {
+                                    if (!transferenciaMonto || Number(transferenciaMonto) <= 0) {
+                                        showError("Monto inválido", "Ingresa una cantidad válida");
+                                        return;
+                                    }
+
+                                    setCargando(true);
+                                    try {
+                                        const response = await apiCall('/api/cliente/transferencias/qr/procesar', {
+                                            method: 'POST',
+                                            body: JSON.stringify({
+                                                idCuentaOrigen: clienteAuth.idCuenta,
+                                                idCuentaDestino: Number(scannedCode),
+                                                monto: Number(transferenciaMonto)
+                                            })
+                                        });
+
+                                        const data = await response.json();
+                                        if (!response.ok) throw new Error(data.message);
+
+                                        showSuccess("Transferencia Exitosa", `Se envió ${clienteAuth.moneda} ${transferenciaMonto}`);
+                                        setTransferenciaMonto('');
+                                        setView('home');
+                                        await refrescarDatosCliente(clienteAuth.idCuenta);
+                                    } catch (err) {
+                                        showError("Error", err.message);
+                                    } finally {
+                                        setCargando(false);
+                                    }
+                                }}
+                                disabled={cargando}
+                                className="w-full max-w-sm bg-[#004a8e] text-white py-4 rounded-xl font-black text-lg hover:bg-[#003366] active:scale-95 transition-all disabled:opacity-50"
+                            >
+                                {cargando ? 'Procesando...' : 'Transferir'}
+                            </button>
                         </div>
                     </div>
                 )}

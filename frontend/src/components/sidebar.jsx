@@ -7,11 +7,12 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
-  Menu
+  Menu,
+  Truck,
+  Smartphone
 } from 'lucide-react';
 import LogoBisa from '../assets/logo-bisa.png';
 
-// El menú del administrador. Maneja si está colapsado (en PC) o si se abre como cajón (en Móvil)
 const Sidebar = ({ setVistaActiva, vistaActiva, isCollapsed, setIsCollapsed, isMobileOpen, setIsMobileOpen }) => {
   const { user, logout } = useAuth();
 
@@ -76,8 +77,8 @@ const Sidebar = ({ setVistaActiva, vistaActiva, isCollapsed, setIsCollapsed, isM
             </button>
           </header>
 
-          {/* Enlaces de las vistas, solo visibles para el ADMINISTRADOR */}
           <nav className="flex-1 overflow-y-auto py-4 px-5 space-y-3">
+            {/* Enlaces de las vistas, solo visibles para el ADMINISTRADOR */}
             {user?.rol === 'ADMINISTRADOR' && (
               <>
                 <button onClick={() => handleMenuClick('cajeros')} className={getBtnClass('cajeros')} title={isCollapsed && !isMobileOpen ? "Gestión ATMs" : ""}>
@@ -94,7 +95,20 @@ const Sidebar = ({ setVistaActiva, vistaActiva, isCollapsed, setIsCollapsed, isM
                   <ClipboardList size={22} className="shrink-0" />
                   {(!isCollapsed || isMobileOpen) && <span className="whitespace-nowrap">Auditoría LAN</span>}
                 </button>
+
+                <button onClick={() => handleMenuClick('dispositivos')} className={getBtnClass('dispositivos')} title={isCollapsed && !isMobileOpen ? "Dispositivos" : ""}>
+                  <Smartphone size={22} className="shrink-0" />
+                  {(!isCollapsed || isMobileOpen) && <span className="whitespace-nowrap">Dispositivos Bloqueados</span>}
+                </button>
               </>
+            )}
+
+            {/* Enlace de la vista, solo visible para el OPERADOR_ETV */}
+            {user?.rol === 'OPERADOR_ETV' && (
+              <button onClick={() => handleMenuClick('bovedas')} className={getBtnClass('bovedas')} title={isCollapsed && !isMobileOpen ? "Logística ETV" : ""}>
+                <Truck size={22} className="shrink-0" />
+                {(!isCollapsed || isMobileOpen) && <span className="whitespace-nowrap">Logística ETV</span>}
+              </button>
             )}
           </nav>
 
@@ -103,11 +117,11 @@ const Sidebar = ({ setVistaActiva, vistaActiva, isCollapsed, setIsCollapsed, isM
             {(!isCollapsed || isMobileOpen) && (
               <div className="flex items-center mb-6">
                 <div className="h-12 w-12 rounded-2xl bg-[#004a8e] flex items-center justify-center text-[#f5d000] font-black text-xl shadow-lg shadow-blue-900/20 shrink-0">
-                  {user?.username ? user.username.charAt(0).toUpperCase() : 'A'}
+                  {user?.username ? user.username.charAt(0).toUpperCase() : 'U'}
                 </div>
                 <div className="ml-4 overflow-hidden">
                   <p className="text-sm font-black text-[#004a8e] truncate leading-tight mb-1">
-                    {user?.username || 'Admin_Bisa'}
+                    {user?.username || 'Usuario'}
                   </p>
                   <span className="text-[10px] bg-[#f5d000] text-[#004a8e] px-2.5 py-0.5 rounded-md font-black uppercase tracking-widest">
                     {user?.rol || 'Staff'}

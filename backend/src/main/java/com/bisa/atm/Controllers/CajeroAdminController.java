@@ -4,6 +4,7 @@ import com.bisa.atm.dto.CajeroDto;
 import com.bisa.atm.Services.CajeroAdminService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -17,6 +18,9 @@ public class CajeroAdminController {
     @Autowired
     private CajeroAdminService cajeroAdminService;
 
+    @Autowired
+    private SimpMessagingTemplate messagingTemplate;
+
     //devuelve la lista completa de cajeros para mostrarlo en la tabla
     @GetMapping("/listar")
     public ResponseEntity<List<CajeroDto>> obtenerCajeros() {
@@ -28,6 +32,10 @@ public class CajeroAdminController {
     public ResponseEntity<?> registrarCajero(@RequestBody CajeroDto cajeroDto) {
         try {
             cajeroAdminService.registrarCajero(cajeroDto);
+
+            // CORRECCIÓN: Le decimos a Java que el Map es el Object del payload
+            messagingTemplate.convertAndSend("/topic/cajeros", (Object) Map.of("accion", "NUEVO_CAJERO"));
+
             return ResponseEntity.ok(Map.of("message", "Cajero registrado con éxito"));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("message", "Error al registrar: " + e.getMessage()));
@@ -39,6 +47,9 @@ public class CajeroAdminController {
     public ResponseEntity<?> actualizarCajero(@PathVariable Long id, @RequestBody CajeroDto cajeroDto) {
         try {
             cajeroAdminService.actualizarCajero(id, cajeroDto);
+
+            messagingTemplate.convertAndSend("/topic/cajeros", (Object) Map.of("accion", "ACTUALIZACION"));
+
             return ResponseEntity.ok(Map.of("message", "Cajero actualizado"));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("message", "Error al actualizar: " + e.getMessage()));
@@ -50,6 +61,9 @@ public class CajeroAdminController {
     public ResponseEntity<?> cambiarEstadoCajero(@PathVariable Long id, @PathVariable String nuevoEstado) {
         try {
             cajeroAdminService.cambiarEstadoCajero(id, nuevoEstado.toUpperCase());
+
+            messagingTemplate.convertAndSend("/topic/cajeros", (Object) Map.of("accion", "ACTUALIZACION"));
+
             return ResponseEntity.ok(Map.of("message", "Estado del cajero actualizado"));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("message", "Error al cambiar estado: " + e.getMessage()));
@@ -61,6 +75,9 @@ public class CajeroAdminController {
     public ResponseEntity<?> eliminarCajero(@PathVariable Long id) {
         try {
             cajeroAdminService.eliminarCajeroLogico(id);
+
+            messagingTemplate.convertAndSend("/topic/cajeros", (Object) Map.of("accion", "ACTUALIZACION"));
+
             return ResponseEntity.ok(Map.of("message", "Cajero dado de baja"));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("message", "Error al eliminar: " + e.getMessage()));

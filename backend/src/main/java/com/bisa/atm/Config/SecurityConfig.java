@@ -46,10 +46,21 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api/qr/**", "/api/tokens-qr/**").permitAll()
                         .requestMatchers("/ws-atm/**").permitAll()
+                        .requestMatchers("/api/cliente/transferencias/qr/**").permitAll()
 
-                        //rutas privadas (token y rol)
+                        // Permite al tesorero ver la lista de cajeros y sus casetas (GET)
+                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/admin/cajeros/listar").hasAnyAuthority("ADMINISTRADOR", "OPERADOR_ETV")
+                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/admin/cajeros/*/casetas").hasAnyAuthority("ADMINISTRADOR", "OPERADOR_ETV")
+
+                        // Permite al tesorero ver las alertas EOQ y recargar billetes físicos
+                        .requestMatchers("/api/admin/casetas/**").hasAnyAuthority("ADMINISTRADOR", "OPERADOR_ETV")
+                        .requestMatchers("/api/admin/alertas/**").hasAnyAuthority("ADMINISTRADOR", "OPERADOR_ETV")
+
+                        // (Crear cajeros, editar clientes, eliminar, etc.)
                         .requestMatchers("/api/admin/**").hasAuthority("ADMINISTRADOR")
-                        .requestMatchers("/api/admin/casetas/**").hasAuthority("ADMINISTRADOR")
+                        .requestMatchers("/api/admin/dispositivos/**").hasAuthority("ADMINISTRADOR")
+
+                        // Otras rutas
                         .requestMatchers("/api/cajero/**").hasAnyAuthority("ADMINISTRADOR", "MANTENIMIENTO")
                         .requestMatchers("/api/cliente/**").hasAuthority("CLIENTE")
 

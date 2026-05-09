@@ -10,6 +10,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.bisa.atm.Services.DispositivoService;
 
 import java.time.LocalDateTime;
 import java.util.Map;
@@ -22,18 +23,28 @@ public class AuthService {
     @Autowired private JwtService jwtService;
     @Autowired private CustomUserDetailsService userDetailsService;
     @Autowired private CuentaBancariaRepository cuentaRepository;
+    @Autowired private DispositivoService dispositivoService;
 
-    //login para admins
+    // login para admins y operadores ETV (personal del banco/Prosegur)
     public Map<String, String> loginAdmin(String username, String password) {
         Usuario usuario = usuarioRepository.findByNombreUsuario(username)
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
 
-        if (passwordEncoder.matches(password, usuario.getContrasena()) && usuario.getRol().equals("ADMINISTRADOR")) {
+        // CORRECCIÓN: Validamos que el rol sea ADMINISTRADOR o OPERADOR_ETV
+        if (passwordEncoder.matches(password, usuario.getContrasena()) &&
+                (usuario.getRol().equals("ADMINISTRADOR") || usuario.getRol().equals("OPERADOR_ETV"))) {
+
             UserDetails userDetails = userDetailsService.loadUserByUsername(usuario.getNombreUsuario());
             String token = jwtService.generarToken(userDetails);
-            return Map.of("token", token, "redirect", "/admin/dashboard");
+
+            // CORRECCIÓN: Retornamos el redirect a /etv/dashboard
+            return Map.of(
+                    "token", token,
+                    "rol", usuario.getRol(),
+                    "redirect", usuario.getRol().equals("ADMINISTRADOR") ? "/admin/dashboard" : "/etv/dashboard"
+            );
         }
-        throw new RuntimeException("Acceso denegado: Credenciales inválidas");
+        throw new RuntimeException("Acceso denegado: Credenciales inválidas o rol no autorizado");
     }
 
     // login para la app movil donde controla bloqueos, intentos y cambio de contraseña temporal
@@ -56,7 +67,7 @@ public class AuthService {
             throw new RuntimeException("Esta cuenta ha sido dada de baja. Comunícate con el banco.");
         }
 
-        //verifica contraseña encriptada
+        // verifica contraseña encriptada
         if (passwordEncoder.matches(password, usuario.getContrasena()) && usuario.getRol().equals("CLIENTE")) {
 
             // Si el login es exitoso, se resetea los intentos fallidos
@@ -77,12 +88,18 @@ public class AuthService {
             CuentaBancaria cuenta = cuentaRepository.findByUsuario_IdUsuario(usuario.getIdUsuario())
                     .orElseThrow(() -> new RuntimeException("El cliente no tiene cuenta asignada"));
 
+            boolean dispositivoBloqueado = dispositivoService.estaBloqueado(dispositivoId);
+            if (dispositivoBloqueado) {
+                throw new RuntimeException("Este dispositivo ha sido bloqueado. Contacta con tu banco.");
+            }
+
             if (usuario.getUltimoTokenJwt() != null && !usuario.getUltimoTokenJwt().isEmpty()) {
                 String dispositivoAnterior = usuario.getDispositivoIdentificador();
                 if (dispositivoAnterior != null && !dispositivoAnterior.equals(dispositivoId)) {
                     throw new RuntimeException("Tu cuenta está siendo usada en otro dispositivo. Solo se permite un dispositivo activo por cuenta.");
                 }
             }
+            dispositivoService.registrarOActualizarDispositivo(usuario.getIdUsuario(), dispositivoId);
 
             // generar el token JWT
             UserDetails userDetails = userDetailsService.loadUserByUsername(usuario.getNombreUsuario());
@@ -93,7 +110,7 @@ public class AuthService {
             usuario.setFechaUltimoAcceso(LocalDateTime.now());
             usuarioRepository.save(usuario);
 
-            //mapear solo lo que la app necesita para funcionar
+            // mapear solo lo que la app necesita para funcionar
             return Map.of(
                     "mensaje", "Login exitoso",
                     "requiereCambio", false,
@@ -107,7 +124,7 @@ public class AuthService {
         } else {
             usuario.setIntentosFallidos(usuario.getIntentosFallidos() + 1);
 
-            //al tercer strike se bloquea la cuenta por 24 horas
+            // al tercer strike se bloquea la cuenta por 24 horas
             if (usuario.getIntentosFallidos() >= 3) {
                 usuario.setEstado("BLOQUEADO");
                 usuario.setFechaDesbloqueo(LocalDateTime.now().plusHours(24));
@@ -126,7 +143,7 @@ public class AuthService {
         Usuario usuario = usuarioRepository.findById(idUsuario)
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
 
-        usuario.setContrasena(passwordEncoder.encode(nuevaPassword)); //encripta
+        usuario.setContrasena(passwordEncoder.encode(nuevaPassword)); // encripta
         usuario.setDebeCambiarContrasena(false); // le quita lo temporal
         usuarioRepository.save(usuario);
     }

@@ -58,5 +58,47 @@
   "common": {
     "back": "VOLVER",
     "cancel": "CANCELAR"
+  },
+  "mobile": {
+    "login": {
+      "title": "Bienvenido a BISA Móvil",
+      "subtitle": "Banca Móvil",
+      "username_placeholder": "Ingrese su usuario",
+      "password_placeholder": "Contraseña",
+      "submit_btn": "Ingresar"
+    },
+    "dashboard": {
+      "product": "Mi Producto",
+      "balance": "Saldo Disponible",
+      "recent_movements": "Últimos Movimientos",
+      "home": "Inicio",
+      "atms": "Cajeros",
+      "access_atm": "Acceso Cajero QR",
+      "my_qr": "Mi QR",
+      "transfers": "Transferencias",
+      "validate_bill": "Validar Billete BCB",
+      "no_movements": "No hay movimientos recientes.",
+      "receive": "RECIBIR",
+      "receive_desc": "Genera QR para recibir dinero",
+      "send": "ENVIAR",
+      "send_desc": "Escanea QR para enviar dinero",
+      "savings_account": "Caja de Ahorro",
+      "nearby_atms": "ATMs Cercanos",
+      "send_money": "Transferir Dinero",
+      "transaction": "Transacción",
+      "transaction_type": {
+        "deposito": "Depósito",
+        "deposito_inicial": "Depósito Inicial",
+        "retiro": "Retiro",
+        "transferencia": "Transferencia",
+        "pago": "Pago"
+      },
+      "saving_account_mini": "Caja de ahorro",
+      "copy_account": "Copiar ID de Cuenta",
+      "what_do_you_want": "¿Qué deseas hacer?",
+      "others_scan_you": "Otros pueden escanearte para enviarte dinero",
+      "scan_receiver_qr": "Escanea el QR de quien recibirá el dinero.",
+      "scan_atm_qr": "Apunta al QR del Cajero Automático."
+    }
   }
 }

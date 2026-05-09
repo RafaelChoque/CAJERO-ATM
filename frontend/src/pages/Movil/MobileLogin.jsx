@@ -4,9 +4,11 @@ import { showError, showSuccess } from '../../utils/alerts';
 import { User, Lock, Eye, EyeOff } from 'lucide-react';
 import logoBisa from '../../assets/logo-bisa.png';
 import { useAuth } from '../../context/AuthContext';
+import { useTranslation } from 'react-i18next';
 
 const MobileLogin = () => {
     const navigate = useNavigate();
+    const { t, i18n } = useTranslation();
 
     const { iniciarSesionCliente } = useAuth();
 
@@ -23,6 +25,11 @@ const MobileLogin = () => {
             localStorage.setItem('dispositivo_id', dispositivoId);
         }
         return dispositivoId;
+    };
+    const toggleLanguage = () => {
+        const nextLang = i18n.language === 'es' ? 'en' : 'es';
+        i18n.changeLanguage(nextLang);
+        localStorage.setItem('idioma', nextLang); // Guarda la preferencia
     };
 
     const handleSubmit = async (e) => {
@@ -51,6 +58,7 @@ const MobileLogin = () => {
             } else {
 
                 const datosCliente = {
+                    idUsuario: data.idUsuario, // ← ESTO FALTABA
                     idCuenta: data.idCuenta,
                     nombre: data.nombre,
                     saldo: data.saldo,
@@ -82,6 +90,13 @@ const MobileLogin = () => {
                 <div className="hidden md:block absolute top-0 inset-x-0 h-6 bg-slate-800 rounded-b-3xl w-40 mx-auto z-50"></div>
                 {/* logo  */}
                 <div className="flex-1 flex flex-col items-center justify-center p-8 z-10 w-full max-w-sm mx-auto">
+                    {/* Botón para cambiar idioma */}
+                    <button
+                        onClick={toggleLanguage}
+                        className="absolute top-4 right-4 z-50 w-12 h-12 flex items-center justify-center bg-[#003366] text-white rounded-full font-black text-sm shadow-lg hover:bg-blue-800 active:scale-95 transition-all border-2 border-white"
+                    >
+                        {i18n.language === 'es' ? 'EN' : 'ES'}
+                    </button>
                     <div className="mb-6 w-48 h-20 flex items-center justify-center">
                         <img
                             src={logoBisa}
@@ -96,7 +111,7 @@ const MobileLogin = () => {
                     </div>
 
                     <p className="text-blue-200 text-xs tracking-[0.3em] uppercase font-bold mb-10 text-center relative">
-                        Banca Móvil
+                        {t('mobile.login.subtitle')}
                         <span className="absolute -bottom-3 left-1/2 transform -translate-x-1/2 w-8 h-0.5 bg-[#f5d000] rounded-full"></span>
                     </p>
 
@@ -104,7 +119,7 @@ const MobileLogin = () => {
                     <form onSubmit={handleSubmit} className="w-full space-y-5">
                         {/* campo de usrename (ci) */}
                         <div className="space-y-1.5">
-                            <label className="text-[10px] text-blue-200 font-bold uppercase ml-2 tracking-wider">CI del Cliente</label>
+                            <label className="text-[10px] text-blue-200 font-bold uppercase ml-2 tracking-wider">{t('mobile.login.username_placeholder')}</label>
                             <div className="relative">
                                 <User className="absolute left-4 top-1/2 -translate-y-1/2 text-[#f5d000]" size={20} />
                                 <input
@@ -114,14 +129,14 @@ const MobileLogin = () => {
                                     value={formData.username}
                                     onChange={handleChange}
                                     className="w-full bg-white/10 border border-white/20 text-white rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-[#f5d000] focus:bg-white/20 transition-all placeholder:text-blue-200/50"
-                                    placeholder="Ingrese su carnet"
+                                    placeholder={t('mobile.login.username_placeholder')}
                                 />
                             </div>
                         </div>
 
                         {/* campo de contrasena */}
                         <div className="space-y-1.5">
-                            <label className="text-[10px] text-blue-200 font-bold uppercase ml-2 tracking-wider">Contraseña</label>
+                            <label className="text-[10px] text-blue-200 font-bold uppercase ml-2 tracking-wider">{t('mobile.login.password_placeholder')}</label>
                             <div className="relative">
                                 <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-[#f5d000]" size={20} />
                                 <input
@@ -151,7 +166,7 @@ const MobileLogin = () => {
                             {cargando ? (
                                 <span className="animate-spin text-xl">↻</span>
                             ) : (
-                                'Iniciar Sesión'
+                                t('mobile.login.submit_btn')
                             )}
                         </button>
                     </form>

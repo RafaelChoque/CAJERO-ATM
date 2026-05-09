@@ -16,17 +16,19 @@ export const AuthProvider = ({ children }) => {
 
     useEffect(() => {
         const token = localStorage.getItem('token_bisa');
+        const rolGuardado = localStorage.getItem('rol_bisa');
+
         if (token) {
             try {
                 const decoded = jwtDecode(token);
                 if (decoded.exp * 1000 > Date.now()) {
-                    setUser({ username: decoded.sub, rol: decoded.role || 'ADMINISTRADOR' });
+                    setUser({ username: decoded.sub, rol: rolGuardado || 'ADMINISTRADOR' });
                     setIsAuthenticated(true);
                 } else {
-                    localStorage.removeItem('token_bisa');
+                    logoutLimpiezaProfunda();
                 }
             } catch (error) {
-                localStorage.removeItem('token_bisa');
+                logoutLimpiezaProfunda();
             }
         }
 
@@ -44,8 +46,19 @@ export const AuthProvider = ({ children }) => {
         setLoading(false);
     }, []);
 
+    const logoutLimpiezaProfunda = () => {
+        localStorage.removeItem('token_bisa');
+        localStorage.removeItem('rol_bisa');
+        localStorage.removeItem('token');
+        localStorage.removeItem('rol');
+        setUser(null);
+        setIsAuthenticated(false);
+    };
+
     const login = async (username, password) => {
         try {
+            logoutLimpiezaProfunda();
+
             const response = await fetch(`${API_URL}/api/auth/login-admin`, {
                 method: 'POST',
                 headers: {
@@ -60,9 +73,11 @@ export const AuthProvider = ({ children }) => {
             const data = await response.json();
 
             localStorage.setItem('token_bisa', data.token);
+            localStorage.setItem('rol_bisa', data.rol);
 
             const decoded = jwtDecode(data.token);
-            setUser({ username: decoded.sub, rol: decoded.role || 'ADMINISTRADOR' });
+
+            setUser({ username: decoded.sub, rol: data.rol });
             setIsAuthenticated(true);
 
             return { success: true, redirect: data.redirect };
@@ -73,10 +88,8 @@ export const AuthProvider = ({ children }) => {
     };
 
     const logout = () => {
-        localStorage.removeItem('token_bisa');
-        setUser(null);
-        setIsAuthenticated(false);
-        navigate('/', { replace: true });
+        logoutLimpiezaProfunda();
+        window.location.href = '/';
     };
 
     const iniciarSesionCliente = (dataCliente, token) => {
@@ -89,7 +102,7 @@ export const AuthProvider = ({ children }) => {
         localStorage.removeItem('token_cliente');
         localStorage.removeItem('cliente_auth');
         setClientUser(null);
-        navigate('/movil/login', { replace: true });
+        window.location.href = '/movil/login';
     };
 
     const apiCall = async (endpoint, options = {}) => {

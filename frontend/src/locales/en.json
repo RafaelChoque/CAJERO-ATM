@@ -58,5 +58,47 @@
   "common": {
     "back": "BACK",
     "cancel": "CANCEL"
+  },
+    "mobile": {
+    "login": {
+      "title": "Welcome to BISA Mobile",
+      "subtitle": "Mobile Banking",
+      "username_placeholder": "Username",
+      "password_placeholder": "Password",
+      "submit_btn": "Login"
+    },
+      "dashboard": {
+        "product": "My Product",
+        "balance": "Available Balance",
+        "recent_movements": "Recent Movements",
+        "home": "Home",
+        "atms": "ATMs",
+        "access_atm": "ATM Access QR",
+        "my_qr": "My QR",
+        "transfers": "Transfers",
+        "validate_bill": "Validate BCB",
+        "no_movements": "No recent movements.",
+        "receive": "RECEIVE",
+        "receive_desc": "Generate QR to receive money",
+        "send": "SEND",
+        "send_desc": "Scan QR to send money",
+        "savings_account": "Savings Account",
+        "nearby_atms": "Nearby ATMs",
+        "send_money": "Send Money",
+        "transaction": "Transaction",
+        "transaction_type": {
+          "deposito": "Deposit",
+          "deposito_inicial": "Initial Deposit",
+          "retiro": "Withdrawal",
+          "transferencia": "Transfer",
+          "pago": "Payment"
+        },
+        "saving_account_mini": "Savings account",
+        "copy_account": "Copy Account ID",
+        "what_do_you_want": "What would you like to do?",
+        "others_scan_you": "Others can scan you to send you money",
+        "scan_receiver_qr": "Scan the QR of who will receive the money.",
+        "scan_atm_qr": "Point to the ATM QR code."
+      }
   }
 }

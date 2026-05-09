@@ -2,7 +2,7 @@ package com.bisa.atm;
 
 import com.bisa.atm.Entities.Persona;
 import com.bisa.atm.Entities.Usuario;
-import com.bisa.atm.Repositories.PersonaRepository; // Asegúrate de que se llame así
+import com.bisa.atm.Repositories.PersonaRepository;
 import com.bisa.atm.Repositories.UsuarioRepository;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -35,7 +35,6 @@ public class DataInitializer implements CommandLineRunner {
             adminPersona.setCorreoElectronico("admin@bisa.com.bo");
             adminPersona.setDireccion("Oficina Central La Paz");
             adminPersona.setFechaNacimiento(LocalDate.of(1990, 1, 1));
-
             personaRepository.save(adminPersona);
 
             Usuario admin = new Usuario();
@@ -45,8 +44,27 @@ public class DataInitializer implements CommandLineRunner {
             admin.setPersona(adminPersona);
             admin.setEstado("ACTIVO");
             admin.setDebeCambiarContrasena(false);
-
             usuarioRepository.save(admin);
+
+            Persona etvPersona = new Persona();
+            etvPersona.setNombre("Logística");
+            etvPersona.setApellidoPaterno("Prosegur");
+            etvPersona.setApellidoMaterno("Bolivia");
+            etvPersona.setCi("9876543");
+            etvPersona.setCelular("71111111");
+            etvPersona.setCorreoElectronico("operaciones@prosegur.com.bo");
+            etvPersona.setDireccion("Base Operaciones ETV");
+            etvPersona.setFechaNacimiento(LocalDate.of(1985, 5, 15));
+            personaRepository.save(etvPersona);
+
+            Usuario operadorEtv = new Usuario();
+            operadorEtv.setNombreUsuario("etv_bisa");
+            operadorEtv.setContrasena(passwordEncoder.encode("prosegur2026"));
+            operadorEtv.setRol("OPERADOR_ETV");
+            operadorEtv.setPersona(etvPersona);
+            operadorEtv.setEstado("ACTIVO");
+            operadorEtv.setDebeCambiarContrasena(false);
+            usuarioRepository.save(operadorEtv);
 
         }
     }

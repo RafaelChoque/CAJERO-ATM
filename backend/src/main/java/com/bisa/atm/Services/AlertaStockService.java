@@ -1,7 +1,7 @@
 package com.bisa.atm.Services;
 
 import com.bisa.atm.Entities.Caseta;
-import com.bisa.atm.Repositories.BilleteRepository; // 🚀 Importación necesaria
+import com.bisa.atm.Repositories.BilleteRepository;
 import com.bisa.atm.Repositories.CasetaRepository;
 import com.bisa.atm.dto.AlertaStockDto;
 import org.springframework.stereotype.Service;
@@ -15,26 +15,26 @@ public class AlertaStockService {
     private final OptimizacionInventarioService optimizacionService;
     private final BilleteRepository billeteRepository;
 
-    //inyectar el repositorio de billetes para acceder al historial de retiros
+    // Inyectar el repositorio de billetes para acceder al historial de retiros
     public AlertaStockService(CasetaRepository casetaRepository, OptimizacionInventarioService optimizacionService, BilleteRepository billeteRepository) {
         this.casetaRepository = casetaRepository;
         this.optimizacionService = optimizacionService;
         this.billeteRepository = billeteRepository;
     }
 
-    //obtiene las alertas de stock para todas las casetas que estén por debajo del umbral, sin importar el cajero
+    // Obtiene las alertas de stock para todas las casetas que estén por debajo del umbral, sin importar el cajero
     public List<AlertaStockDto> obtenerAlertasStock() {
         List<Caseta> casetas = casetaRepository.findCasetasConStockBajo();
         return casetas.stream().map(this::mapearAlerta).toList();
     }
 
-    //obtiene las alertas de stock para las casetas de un cajero especifico
+    // Obtiene las alertas de stock para las casetas de un cajero especifico
     public List<AlertaStockDto> obtenerAlertasStockPorCajero(Long idCajero) {
         List<Caseta> casetas = casetaRepository.findCasetasConStockBajoPorCajero(idCajero);
         return casetas.stream().map(this::mapearAlerta).toList();
     }
 
-    // mapea la informacion de la caseta a un dto de alerta
+    // Mapea la informacion de la caseta a un dto de alerta
     private AlertaStockDto mapearAlerta(Caseta caseta) {
         AlertaStockDto dto = new AlertaStockDto();
         dto.setIdCaseta(caseta.getIdCaseta());
@@ -51,7 +51,7 @@ public class AlertaStockService {
             dto.setMensaje("La caseta alcanzó su Punto de Reorden.");
         }
 
-        // implementacion modelo eoq para sugerir cantidad de recarga basada en demanda anual
+        // Implementacion modelo EOQ para sugerir cantidad de recarga basada en demanda anual
         long billetesDispensados = billeteRepository.countByCaseta_IdCasetaAndEstado(caseta.getIdCaseta(), "DISPENSADO");
         int diasOperacionSimulados = 30;
         double demandaDiariaReal = (double) billetesDispensados / diasOperacionSimulados;
@@ -62,7 +62,13 @@ public class AlertaStockService {
         }
 
         int eoq = optimizacionService.sugerirTamanioRecargaEOQ(demandaAnualizada, caseta.getDenominacion());
-        dto.setCantidadSugeridaEOQ(eoq);
+
+        int espacioDisponible = caseta.getCapacidadMaxima() - caseta.getStockActual();
+
+        int recargaSugerida = Math.min(eoq, espacioDisponible);
+
+        dto.setCantidadSugeridaEOQ(recargaSugerida);
+
         return dto;
     }
 }

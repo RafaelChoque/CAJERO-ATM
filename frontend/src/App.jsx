@@ -12,6 +12,8 @@ import MobileLogin from './pages/Movil/MobileLogin';
 import CambiarPasswordMovil from './pages/Movil/CambiarPasswordMovil';
 import MobileDashboard from './pages/Movil/MobileDashboard';
 
+import OperadorDashboard from './pages/operadorETV/operador';
+
 function App() {
     return (
         <BrowserRouter>
@@ -20,10 +22,18 @@ function App() {
                     {/* RUTAS DEL CAJERO (ATM) */}
                     <Route path="/atm" element={<AtmInterface />} />
 
-                    {/* RUTAS DEL ADMINISTRADOR */}
+                    {/* LOGIN ÚNICO PARA STAFF (ADMINISTRADORES Y ETV) */}
                     <Route path="/admin/login" element={<Login />} />
+
+                    {/* RUTAS PROTEGIDAS DEL ADMINISTRADOR */}
                     <Route element={<ProtectedRoute allowedRoles={['ADMINISTRADOR', 'administrador']} />}>
                         <Route path="/admin/dashboard" element={<AdminDashboard />} />
+                    </Route>
+
+                    {/* RUTAS PROTEGIDAS DEL OPERADOR ETV */}
+                    <Route element={<ProtectedRoute allowedRoles={['OPERADOR_ETV']} />}>
+                        {/* ATENCIÓN: Se mantiene /etv/dashboard para que coincida con el redireccionamiento del backend */}
+                        <Route path="/etv/dashboard" element={<OperadorDashboard />} />
                     </Route>
 
                     {/* RUTAS DE LA APP MÓVIL */}
@@ -33,6 +43,7 @@ function App() {
                         <Route path="/movil/dashboard" element={<MobileDashboard />} />
                     </Route>
 
+                    {/* REDIRECCIÓN POR DEFECTO SI LA RUTA NO EXISTE */}
                     <Route path="*" element={<Navigate to="/atm" replace />} />
                 </Routes>
             </AuthProvider>
