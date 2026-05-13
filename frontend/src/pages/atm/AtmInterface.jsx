@@ -109,18 +109,6 @@ const AtmInterface = () => {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [step, pin, retiroMonto, cargando, idCuenta]);
 
-    useEffect(() => {
-        const resincronizarCajero = async () => {
-            if (!cajeroId) return;
-            try {
-                await sincronizarIpCajero(cajeroId);
-            } catch (err) {
-                console.error('No se pudo resincronizar la IP del cajero:', err.message);
-            }
-        };
-        resincronizarCajero();
-    }, [cajeroId]);
-
     const toggleIdioma = () => {
         const nuevoIdioma = i18n.language === 'es' ? 'en' : 'es';
         i18n.changeLanguage(nuevoIdioma);
@@ -142,17 +130,6 @@ const AtmInterface = () => {
         } finally {
             setCargando(false);
         }
-    };
-
-    const sincronizarIpCajero = async (idCajeroParam) => {
-        const response = await apiCall(`/api/cajero/sincronizar-ip/${idCajeroParam}`, {
-            method: 'POST'
-        });
-        const data = await response.json();
-        if (!response.ok) {
-            throw new Error(data.message || 'No se pudo sincronizar la IP del cajero');
-        }
-        return data;
     };
 
     const iniciarOperacionQR = async () => {
