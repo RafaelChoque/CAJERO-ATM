@@ -121,7 +121,6 @@ const AtmInterface = () => {
         setCargando(true);
         setError(null);
         try {
-            await sincronizarIpCajero(inputSetup);
             localStorage.setItem('ATM_ID', inputSetup);
             setCajeroId(inputSetup);
             setStep('welcome');

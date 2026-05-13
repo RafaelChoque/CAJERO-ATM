@@ -17,6 +17,9 @@ const DashboardGerencial = () => {
     const { apiCall } = useAuth();
 
     const [dashboard, setDashboard] = useState(null);
+    const [metricasColas, setMetricasColas] = useState([]);
+    const [metricasMarkov, setMetricasMarkov] = useState([]);
+    const [metricasAgotamiento, setMetricasAgotamiento] = useState([]);
     const [cargando, setCargando] = useState(true);
     const [error, setError] = useState(null);
 
@@ -46,13 +49,20 @@ const DashboardGerencial = () => {
             const response = await apiCall('/api/admin/dashboard', {
                 method: 'GET'
             });
-
+            const responseColas = await apiCall('/api/admin/dashboard/metricas-colas', { method: 'GET' });
+            const responseMarkov = await apiCall('/api/admin/dashboard/metricas-markov', { method: 'GET' });
+            const responseAgotamiento = await apiCall('/api/admin/dashboard/metricas-agotamiento', { method: 'GET' });
             const data = await response.json();
+            const dataColas = await responseColas.json();
+            const dataMarkov = await responseMarkov.json();
+            const dataAgotamiento = await responseAgotamiento.json();
 
             if (!response.ok) {
                 throw new Error(data?.message || 'No se pudo cargar el dashboard gerencial');
             }
-
+            setMetricasColas(dataColas);
+            setMetricasMarkov(dataMarkov);
+            setMetricasAgotamiento(dataAgotamiento);
             setDashboard(data);
 
             if (mostrarToast) {
@@ -341,8 +351,127 @@ const DashboardGerencial = () => {
                     </table>
                 </div>
             </div>
+
+            {/* Análisis de Colas (M/M/1) */}
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden p-5">
+                <h3 className="text-xl font-bold text-gray-800 mb-4">Análisis de Colas y Saturación (M/M/1)</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {metricasColas.map(metrica => (
+                        <div key={metrica.idCajero} className="p-4 border border-gray-100 rounded-xl shadow-sm bg-gray-50">
+                            <h4 className="font-bold text-lg text-indigo-700">Cajero: {metrica.codigoCajero}</h4>
+                            <div className="mt-2 text-sm text-gray-600">
+                                <p><strong>Factor de uso (ρ):</strong> {metrica.rho.toFixed(2)}%</p>
+                                <p><strong>Clientes en fila (Lq):</strong> {metrica.lq.toFixed(1)} personas</p>
+                                <p><strong>Espera promedio (Wq):</strong> {metrica.wq.toFixed(1)} minutos</p>
+                            </div>
+
+                            <div className={`mt-3 p-2 rounded text-sm font-semibold ${metrica.rho > 80 ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"}`}>
+                                Status: {metrica.alerta}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+            {/* Análisis Cadenas de Markov */}
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden p-5 mt-6">
+                <h3 className="text-xl font-bold text-gray-800 mb-4">Predicción de Estados a Largo Plazo - Cadenas de Markov</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {metricasMarkov && metricasMarkov.length > 0 ? (
+                        metricasMarkov.map(metrica => (
+                            <div key={metrica.idCajero} className="p-4 border border-gray-100 rounded-xl shadow-sm bg-slate-50">
+                                <h4 className="font-bold text-lg text-indigo-700 mb-2">Cajero: {metrica.codigoCajero}</h4>
+                                <p className="text-xs text-gray-500 mb-3 uppercase tracking-wider">Estado actual: <span className="font-bold">{metrica.estadoActual}</span></p>
+
+                                <div className="space-y-2 text-sm font-medium">
+                                    <div className="flex justify-between items-center bg-green-50 text-green-700 p-2 rounded border border-green-200">
+                                        <span>✓ Óptimo/Operativo:</span>
+                                        <span className="font-black">{metrica.probOptimo.toFixed(1)}%</span>
+                                    </div>
+                                    <div className="flex justify-between items-center bg-orange-50 text-orange-700 p-2 rounded border border-orange-200">
+                                        <span>⚠ Bajo Stock (Riesgo):</span>
+                                        <span className="font-black">{metrica.probRiesgo.toFixed(1)}%</span>
+                                    </div>
+                                    <div className="flex justify-between items-center bg-red-50 text-red-700 p-2 rounded border border-red-200">
+                                        <span>✗ Falla/Mantenimiento:</span>
+                                        <span className="font-black">{metrica.probMantenimiento.toFixed(1)}%</span>
+                                    </div>
+                                </div>
+
+                                <div className="mt-4 pt-3 border-t border-gray-300">
+                                    <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-1">💡 Recomendación IA:</p>
+                                    <p className={`text-sm font-bold rounded-lg p-2 ${
+                                        metrica.probMantenimiento > 15
+                                            ? 'bg-orange-100 text-orange-800'
+                                            : 'bg-emerald-100 text-emerald-800'
+                                    }`}>
+                                        {metrica.recomendacionPredictiva}
+                                    </p>
+                                </div>
+                            </div>
+                        ))
+                    ) : (
+                        <div className="col-span-full text-center py-8 text-gray-500">
+                            <p>No hay datos de predicción disponibles.</p>
+                        </div>
+                    )}
+                </div>
+            </div>
+            {/* Predicción de Agotamiento de Dinero */}
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden p-5 mt-6">
+                <h3 className="text-xl font-bold text-gray-800 mb-4">⏰ Predicción de Agotamiento de Efectivo</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {metricasAgotamiento && metricasAgotamiento.length > 0 ? (
+                        metricasAgotamiento.map(pred => (
+                            <div key={pred.idCajero} className="p-4 border-2 border-gray-100 rounded-xl shadow-sm">
+                                <h4 className="font-bold text-lg text-indigo-700 mb-3">{pred.codigoCajero}</h4>
+
+                                <div className="space-y-2 text-sm">
+                                    <div className="flex justify-between">
+                                        <span className="text-gray-600">Dinero disponible:</span>
+                                        <span className="font-black text-blue-600">Bs {pred.totalBilletes}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-gray-600">Promedio/día:</span>
+                                        <span className="font-black">Bs {pred.promedioBilletesXDia}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-gray-600">Retirados hoy:</span>
+                                        <span className="font-black text-orange-600">Bs {pred.billetesRetiradosHoy}</span>
+                                    </div>
+                                </div>
+
+                                <div className="mt-3 pt-3 border-t-2 border-gray-200">
+                                    <p className="text-xs text-gray-500 uppercase font-bold mb-1">Predicción:</p>
+                                    <p className={`text-2xl font-black ${
+                                        pred.diasHastaAgotamiento <= 1 ? 'text-red-600' :
+                                            pred.diasHastaAgotamiento <= 3 ? 'text-orange-600' :
+                                                pred.diasHastaAgotamiento <= 7 ? 'text-yellow-600' :
+                                                    'text-green-600'
+                                    }`}>
+                                        {pred.diasHastaAgotamiento === 999 ? '∞' : pred.diasHastaAgotamiento} días
+                                    </p>
+                                </div>
+
+                                <div className={`mt-3 p-2 rounded-lg text-xs font-bold text-center ${
+                                    pred.diasHastaAgotamiento <= 1 ? 'bg-red-100 text-red-700' :
+                                        pred.diasHastaAgotamiento <= 3 ? 'bg-orange-100 text-orange-700' :
+                                            pred.diasHastaAgotamiento <= 7 ? 'bg-yellow-100 text-yellow-700' :
+                                                'bg-green-100 text-green-700'
+                                }`}>
+                                    {pred.estado}
+                                </div>
+
+                                <p className="text-xs text-gray-600 mt-3 italic">{pred.alerta}</p>
+                            </div>
+                        ))
+                    ) : (
+                        <div className="col-span-full text-center py-8 text-gray-500">
+                            Sin datos de predicción.
+                        </div>
+                    )}
+                </div>
+            </div>
         </div>
     );
 };
-
 export default DashboardGerencial;

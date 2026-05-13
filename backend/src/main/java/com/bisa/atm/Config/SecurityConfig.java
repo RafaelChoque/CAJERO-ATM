@@ -59,6 +59,7 @@ public class SecurityConfig {
                         // (Crear cajeros, editar clientes, eliminar, etc.)
                         .requestMatchers("/api/admin/**").hasAuthority("ADMINISTRADOR")
                         .requestMatchers("/api/admin/dispositivos/**").hasAuthority("ADMINISTRADOR")
+                        .requestMatchers("/api/admin/dashboard/**").hasAuthority("ADMINISTRADOR")
 
                         // Otras rutas
                         .requestMatchers("/api/cajero/**").hasAnyAuthority("ADMINISTRADOR", "MANTENIMIENTO")
