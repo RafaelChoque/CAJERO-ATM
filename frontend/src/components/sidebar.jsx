@@ -1,6 +1,7 @@
 import React from 'react';
 import { useAuth } from '../context/AuthContext';
 import {
+  LayoutDashboard,
   MonitorSmartphone,
   Users,
   ClipboardList,
@@ -99,6 +100,11 @@ const Sidebar = ({ setVistaActiva, vistaActiva, isCollapsed, setIsCollapsed, isM
                 <button onClick={() => handleMenuClick('dispositivos')} className={getBtnClass('dispositivos')} title={isCollapsed && !isMobileOpen ? "Dispositivos" : ""}>
                   <Smartphone size={22} className="shrink-0" />
                   {(!isCollapsed || isMobileOpen) && <span className="whitespace-nowrap">Dispositivos Bloqueados</span>}
+                </button>
+
+                <button onClick={() => handleMenuClick('dashboard')} className={getBtnClass('dashboard')} title={isCollapsed && !isMobileOpen ? "Dashboard Gerencial" : ""}>
+                  <LayoutDashboard size={22} className="shrink-0" />
+                  {(!isCollapsed || isMobileOpen) && <span className="whitespace-nowrap">Dashboard Gerencial</span>}
                 </button>
               </>
             )}

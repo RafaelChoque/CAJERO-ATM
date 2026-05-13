@@ -19,58 +19,125 @@ public class BilleteService {
 
     private final BilleteRepository billeteRepository;
     private final CasetaRepository casetaRepository;
+    private final AuditoriaService auditoriaService;
 
-    public BilleteService(BilleteRepository billeteRepository, CasetaRepository casetaRepository) {
+    public BilleteService(
+            BilleteRepository billeteRepository,
+            CasetaRepository casetaRepository,
+            AuditoriaService auditoriaService
+    ) {
         this.billeteRepository = billeteRepository;
         this.casetaRepository = casetaRepository;
+        this.auditoriaService = auditoriaService;
     }
 
-    // recarga individual solo para una caseta especifica
     @Transactional
     public void cargarBilletesDesdeExcel(Long idCaseta, MultipartFile archivo) {
-        Caseta caseta = casetaRepository.findById(idCaseta)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Caseta no encontrada"));
+        Caseta caseta = null;
 
-        if (!"ACTIVA".equalsIgnoreCase(caseta.getEstado())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La caseta no está activa");
+        try {
+            caseta = casetaRepository.findById(idCaseta)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Caseta no encontrada"));
+
+            if (!"ACTIVA".equalsIgnoreCase(caseta.getEstado())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La caseta no está activa");
+            }
+
+            List<Billete> nuevosBilletes = procesarExcelYCrearBilletes(archivo, Collections.singletonList(caseta));
+
+            billeteRepository.saveAll(nuevosBilletes);
+            caseta.aumentarStock(nuevosBilletes.size());
+            casetaRepository.save(caseta);
+
+            auditoriaService.registrar(
+                    "BILLETES",
+                    "CARGA_EXCEL",
+                    "CASETA",
+                    caseta.getIdCaseta(),
+                    "EXITOSO",
+                    "Se cargaron billetes en una caseta desde Excel",
+                    null,
+                    caseta.getCajero() != null ? caseta.getCajero().getIdCajero() : null,
+                    null,
+                    "{\"cantidadBilletes\":" + nuevosBilletes.size() + ",\"denominacion\":" + caseta.getDenominacion() + "}"
+            );
+
+        } catch (Exception e) {
+            auditoriaService.registrar(
+                    "BILLETES",
+                    "CARGA_EXCEL",
+                    "CASETA",
+                    idCaseta,
+                    "FALLIDO",
+                    "Falló la carga de billetes desde Excel: " + e.getMessage(),
+                    null,
+                    caseta != null && caseta.getCajero() != null ? caseta.getCajero().getIdCajero() : null,
+                    null,
+                    null
+            );
+            throw e;
         }
-
-        List<Billete> nuevosBilletes = procesarExcelYCrearBilletes(archivo, Collections.singletonList(caseta));
-
-        billeteRepository.saveAll(nuevosBilletes);
-        caseta.aumentarStock(nuevosBilletes.size());
-        casetaRepository.save(caseta);
     }
 
-    //recarga total para un cajero con todas las casetas activas
     @Transactional
     public void cargarRemesaMaestra(Long idCajero, MultipartFile archivo) {
-        List<Caseta> casetasDelCajero = casetaRepository.findByCajero_IdCajeroAndEstadoOrderByDenominacionDesc(idCajero, "ACTIVA");
+        try {
+            List<Caseta> casetasDelCajero = casetaRepository.findByCajero_IdCajeroAndEstadoOrderByDenominacionDesc(idCajero, "ACTIVA");
 
-        if (casetasDelCajero.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "El cajero no tiene casetas activas.");
-        }
-
-        List<Billete> nuevosBilletes = procesarExcelYCrearBilletes(archivo, casetasDelCajero);
-
-        // actualiza el stock de todas las casetas afectadas
-        Map<Long, Integer> stockAgregadoPorCaseta = new HashMap<>();
-        for (Billete b : nuevosBilletes) {
-            stockAgregadoPorCaseta.put(b.getCaseta().getIdCaseta(), stockAgregadoPorCaseta.getOrDefault(b.getCaseta().getIdCaseta(), 0) + 1);
-        }
-
-        for (Caseta c : casetasDelCajero) {
-            int cantidadNueva = stockAgregadoPorCaseta.getOrDefault(c.getIdCaseta(), 0);
-            if (cantidadNueva > 0) {
-                c.aumentarStock(cantidadNueva);
-                casetaRepository.save(c);
+            if (casetasDelCajero.isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "El cajero no tiene casetas activas.");
             }
-        }
 
-        billeteRepository.saveAll(nuevosBilletes);
+            List<Billete> nuevosBilletes = procesarExcelYCrearBilletes(archivo, casetasDelCajero);
+
+            Map<Long, Integer> stockAgregadoPorCaseta = new HashMap<>();
+            for (Billete b : nuevosBilletes) {
+                stockAgregadoPorCaseta.put(
+                        b.getCaseta().getIdCaseta(),
+                        stockAgregadoPorCaseta.getOrDefault(b.getCaseta().getIdCaseta(), 0) + 1
+                );
+            }
+
+            for (Caseta c : casetasDelCajero) {
+                int cantidadNueva = stockAgregadoPorCaseta.getOrDefault(c.getIdCaseta(), 0);
+                if (cantidadNueva > 0) {
+                    c.aumentarStock(cantidadNueva);
+                    casetaRepository.save(c);
+                }
+            }
+
+            billeteRepository.saveAll(nuevosBilletes);
+
+            auditoriaService.registrar(
+                    "BILLETES",
+                    "CARGA_REMESA",
+                    "CAJERO",
+                    idCajero,
+                    "EXITOSO",
+                    "Se cargó una remesa maestra al cajero",
+                    null,
+                    idCajero,
+                    null,
+                    "{\"cantidadBilletes\":" + nuevosBilletes.size() + "}"
+            );
+
+        } catch (Exception e) {
+            auditoriaService.registrar(
+                    "BILLETES",
+                    "CARGA_REMESA",
+                    "CAJERO",
+                    idCajero,
+                    "FALLIDO",
+                    "Falló la carga de remesa maestra: " + e.getMessage(),
+                    null,
+                    idCajero,
+                    null,
+                    null
+            );
+            throw e;
+        }
     }
 
-    // validacion y procesamiento del excel para ingresar billetes a la bd
     private List<Billete> procesarExcelYCrearBilletes(MultipartFile archivo, List<Caseta> casetasDisponibles) {
         if (archivo == null || archivo.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Archivo Excel no válido");
@@ -92,36 +159,34 @@ public class BilleteService {
                 if (cellDenom == null) continue;
                 int denominacionExcel = (int) cellDenom.getNumericCellValue();
 
-                // Buscar la caseta que corresponde a esa denominación
                 Caseta casetaDestino = casetasDisponibles.stream()
                         .filter(c -> c.getDenominacion() == denominacionExcel)
                         .findFirst()
-                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                                "No hay una caseta válida para billetes de " + denominacionExcel + " Bs en esta operación."));
+                        .orElseThrow(() -> new ResponseStatusException(
+                                HttpStatus.BAD_REQUEST,
+                                "No hay una caseta válida para billetes de " + denominacionExcel + " Bs en esta operación."
+                        ));
 
-                // lee la serie
                 Cell cellSerie = row.getCell(1);
                 String serieLetra = formatter.formatCellValue(cellSerie).trim().toUpperCase();
 
-                // lee numero de serie
                 Cell cellNumero = row.getCell(2);
                 String numeroSerie = formatter.formatCellValue(cellNumero).trim();
 
                 if (numeroSerie.isEmpty()) continue;
 
-                // inabilitacion de billetes
                 if (esBilleteInhabilitado(denominacionExcel, serieLetra, numeroSerie)) {
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    throw new ResponseStatusException(
+                            HttpStatus.BAD_REQUEST,
                             "¡Alerta BCB! El billete de " + denominacionExcel + " Bs (Serie " + serieLetra + ", Nro: " + numeroSerie + ") " +
-                                    "pertenece al lote inhabilitado por el Banco Central de Bolivia. Entréguelo a una entidad financiera autorizada.");
+                                    "pertenece al lote inhabilitado por el Banco Central de Bolivia. Entréguelo a una entidad financiera autorizada."
+                    );
                 }
 
-                // Duplicado en el mismo archivo
                 if (!seriesEnArchivo.add(numeroSerie)) {
                     throw new ResponseStatusException(HttpStatus.CONFLICT, "Número de serie repetido en el archivo: " + numeroSerie);
                 }
 
-                // Duplicado en Base de Datos
                 if (billeteRepository.existsByNumeroSerie(numeroSerie)) {
                     throw new ResponseStatusException(HttpStatus.CONFLICT, "El número de serie ya existe en la bóveda: " + numeroSerie);
                 }
@@ -139,7 +204,6 @@ public class BilleteService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El archivo no contiene billetes válidos");
         }
 
-        // Verificamos si alguna caseta va a reventar de capacidad
         Map<Long, Integer> conteoPorCaseta = new HashMap<>();
         for (Billete b : nuevosBilletes) {
             long idC = b.getCaseta().getIdCaseta();
@@ -149,15 +213,16 @@ public class BilleteService {
         for (Caseta c : casetasDisponibles) {
             int aCargar = conteoPorCaseta.getOrDefault(c.getIdCaseta(), 0);
             if (c.getStockActual() + aCargar > c.getCapacidadMaxima()) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "La carga de billetes de " + c.getDenominacion() + " Bs supera la capacidad máxima de la caseta.");
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "La carga de billetes de " + c.getDenominacion() + " Bs supera la capacidad máxima de la caseta."
+                );
             }
         }
 
         return nuevosBilletes;
     }
 
-    // metodo para validad si el billete esta inhabilitado
     public boolean esBilleteInhabilitado(int denominacion, String serie, String numeroSerieStr) {
         if (!serie.equals("B")) {
             return false;
@@ -166,7 +231,6 @@ public class BilleteService {
         try {
             long numero = Long.parseLong(numeroSerieStr);
 
-            // caseta de 10 bs
             if (denominacion == 10) {
                 if (numero >= 67250001 && numero <= 67700000) return true;
                 if (numero >= 69050001 && numero <= 69500000) return true;
@@ -178,9 +242,7 @@ public class BilleteService {
                 if (numero >= 86400001 && numero <= 86850000) return true;
                 if (numero >= 90900001 && numero <= 91350000) return true;
                 if (numero >= 91800001 && numero <= 92250000) return true;
-            }
-            // caseta de 20 bs
-            else if (denominacion == 20) {
+            } else if (denominacion == 20) {
                 if (numero >= 87280145 && numero <= 91646549) return true;
                 if (numero >= 96650001 && numero <= 97100000) return true;
                 if (numero >= 99800001 && numero <= 100250000) return true;
@@ -197,9 +259,7 @@ public class BilleteService {
                 if (numero >= 118700001 && numero <= 119150000) return true;
                 if (numero >= 119150001 && numero <= 119600000) return true;
                 if (numero >= 120500001 && numero <= 120950000) return true;
-            }
-            // caseta de 50 bs
-            else if (denominacion == 50) {
+            } else if (denominacion == 50) {
                 if (numero >= 77100001 && numero <= 77550000) return true;
                 if (numero >= 78000001 && numero <= 78450000) return true;
                 if (numero >= 78900001 && numero <= 96350000) return true;

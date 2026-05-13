@@ -7,4 +7,5 @@ import java.util.Optional;
 
 public interface CajeroRepository extends JpaRepository<Cajero, Long> {
     Optional<Cajero> findByCodigoCajero(String codigoCajero);
+    Long countByEstado(String estado);
 }

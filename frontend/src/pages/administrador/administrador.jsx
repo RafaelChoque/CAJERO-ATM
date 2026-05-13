@@ -4,8 +4,10 @@ import VistaCajeros from './vistaCajeros';
 import VistaClientes from './vistaClientes';
 import VistaTransacciones from './vistaTransacciones';
 import VistaDispositivosDevices from './vistaDispositivosDevices';
+import DashboardGerencial from './dashboardGerencial';
 
 const Administrador = () => {
+
     const [vistaActiva, setVistaActiva] = useState('cajeros');
 
     const [isCollapsed, setIsCollapsed] = useState(false);
@@ -29,6 +31,7 @@ const Administrador = () => {
                     {vistaActiva === 'clientes' && <VistaClientes />}
                     {vistaActiva === 'transacciones' && <VistaTransacciones />}
                     {vistaActiva === 'dispositivos' && <VistaDispositivosDevices />}
+                    {vistaActiva === 'dashboard' && <DashboardGerencial />}
                 </main>
             </div>
         </div>

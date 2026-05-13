@@ -37,6 +37,9 @@ const AtmInterface = () => {
     const [retiroMonto, setRetiroMonto] = useState('');
     const [retiroError, setRetiroError] = useState(null);
     const [retiroResultado, setRetiroResultado] = useState(null);
+    const [saldoCuenta, setSaldoCuenta] = useState(null);
+    const [ultimosRetiros, setUltimosRetiros] = useState([]);
+    const [consultaError, setConsultaError] = useState(null);
 
     // Limpieza general al desmontar
     useEffect(() => {
@@ -106,19 +109,50 @@ const AtmInterface = () => {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [step, pin, retiroMonto, cargando, idCuenta]);
 
+    useEffect(() => {
+        const resincronizarCajero = async () => {
+            if (!cajeroId) return;
+            try {
+                await sincronizarIpCajero(cajeroId);
+            } catch (err) {
+                console.error('No se pudo resincronizar la IP del cajero:', err.message);
+            }
+        };
+        resincronizarCajero();
+    }, [cajeroId]);
+
     const toggleIdioma = () => {
         const nuevoIdioma = i18n.language === 'es' ? 'en' : 'es';
         i18n.changeLanguage(nuevoIdioma);
         localStorage.setItem('idioma', nuevoIdioma);
     };
 
-    const configurarTerminal = (e) => {
+    const configurarTerminal = async (e) => {
         e.preventDefault();
         if (!inputSetup) return;
+        setCargando(true);
+        setError(null);
+        try {
+            await sincronizarIpCajero(inputSetup);
+            localStorage.setItem('ATM_ID', inputSetup);
+            setCajeroId(inputSetup);
+            setStep('welcome');
+        } catch (err) {
+            setError(err.message || 'No se pudo configurar el cajero');
+        } finally {
+            setCargando(false);
+        }
+    };
 
-        localStorage.setItem('ATM_ID', inputSetup);
-        setCajeroId(inputSetup);
-        setStep('welcome');
+    const sincronizarIpCajero = async (idCajeroParam) => {
+        const response = await apiCall(`/api/cajero/sincronizar-ip/${idCajeroParam}`, {
+            method: 'POST'
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.message || 'No se pudo sincronizar la IP del cajero');
+        }
+        return data;
     };
 
     const iniciarOperacionQR = async () => {
@@ -325,11 +359,23 @@ const AtmInterface = () => {
                 body: JSON.stringify(retiroResultado)
             });
 
-            const data = await response.json();
-
             if (!response.ok) {
+                const data = await response.json();
                 throw new Error(data.message || 'No se pudo confirmar el retiro');
             }
+
+            const pdfBlob = await response.blob();
+
+            const url = window.URL.createObjectURL(pdfBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'comprobante-retiro.pdf';
+
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+
+            window.URL.revokeObjectURL(url);
 
             setStep('withdraw_success');
         } catch (err) {
@@ -360,6 +406,63 @@ const AtmInterface = () => {
             setRetiroError(null);
             setStep('main_menu');
         }
+    };
+
+    const abrirConsultaSaldo = async () => {
+        if (!idCuenta) return;
+
+        setCargando(true);
+        setConsultaError(null);
+
+        try {
+            const response = await apiCall(`/api/auth/cuenta/${idCuenta}`);
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.message || 'No se pudo consultar el saldo');
+            }
+
+            setSaldoCuenta(data);
+            setStep('balance_view');
+        } catch (err) {
+            setConsultaError(err.message || 'No se pudo consultar el saldo');
+        } finally {
+            setCargando(false);
+        }
+    };
+
+    const abrirUltimosRetiros = async () => {
+        if (!idCuenta) return;
+
+        setCargando(true);
+        setConsultaError(null);
+
+        try {
+            const response = await apiCall(`/api/auth/movimientos/${idCuenta}`);
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.message || 'No se pudieron consultar los movimientos');
+            }
+
+            const retiros = (data || [])
+                .filter(tx => (tx.tipoTransaccion || '').toUpperCase().includes('RETIRO'))
+                .slice(0, 5);
+
+            setUltimosRetiros(retiros);
+            setStep('recent_withdrawals');
+        } catch (err) {
+            setConsultaError(err.message || 'No se pudieron consultar los movimientos');
+        } finally {
+            setCargando(false);
+        }
+    };
+
+    const volverAlMenuTrasConsulta = () => {
+        setSaldoCuenta(null);
+        setUltimosRetiros([]);
+        setConsultaError(null);
+        setStep('main_menu');
     };
 
     const volverAlMenuTrasRetiro = () => {
@@ -571,16 +674,22 @@ const AtmInterface = () => {
                                         <span className="text-xl font-bold text-[#003366]">{t('menu.validator')}</span>
                                     </button>
 
-                                    <button onClick={() => mostrarOpcionEnDesarrollo('Consulta de Saldo')} className="bg-white border-4 border-slate-200 hover:border-[#003366] h-32 rounded-2xl shadow-md flex flex-col items-center justify-center gap-2 group active:scale-95 transition-all overflow-hidden relative">
+                                    <button
+                                        onClick={abrirConsultaSaldo}
+                                        className="bg-white border-4 border-slate-200 hover:border-[#003366] h-32 rounded-2xl shadow-md flex flex-col items-center justify-center gap-2 group active:scale-95 transition-all overflow-hidden relative"
+                                    >
                                         <div className="absolute inset-0 bg-gray-50/50 -z-10 transition-colors group-hover:bg-gray-50"></div>
                                         <Wallet size={40} className="text-slate-400 group-hover:text-[#003366] transition-colors" />
-                                        <span className="text-xl font-bold text-[#003366]">{t('menu.statement')}</span>
+                                        <span className="text-xl font-bold text-[#003366]">Consulta de Saldo</span>
                                     </button>
 
-                                    <button onClick={() => mostrarOpcionEnDesarrollo('Consulta de Movimientos')} className="bg-white border-4 border-slate-200 hover:border-[#003366] h-32 rounded-2xl shadow-md flex flex-col items-center justify-center gap-2 group active:scale-95 transition-all overflow-hidden relative">
+                                    <button
+                                        onClick={abrirUltimosRetiros}
+                                        className="bg-white border-4 border-slate-200 hover:border-[#003366] h-32 rounded-2xl shadow-md flex flex-col items-center justify-center gap-2 group active:scale-95 transition-all overflow-hidden relative"
+                                    >
                                         <div className="absolute inset-0 bg-gray-50/50 -z-10 transition-colors group-hover:bg-gray-50"></div>
                                         <FileText size={40} className="text-slate-400 group-hover:text-[#003366] transition-colors" />
-                                        <span className="text-xl font-bold text-[#003366]">{t('menu.transfer')}</span>
+                                        <span className="text-xl font-bold text-[#003366]">Últimos Retiros</span>
                                     </button>
                                 </div>
                             </div>
@@ -747,6 +856,95 @@ const AtmInterface = () => {
                                     className="mt-8 bg-[#003366] text-white px-8 py-4 rounded-xl font-bold text-xl shadow-lg hover:bg-blue-900 active:scale-95 transition-all"
                                 >
                                     {t('withdraw.back')}
+                                </button>
+                            </div>
+                        )}
+
+                        {step === 'balance_view' && saldoCuenta && (
+                            <div className="w-full h-full flex flex-col items-center justify-center animate-in fade-in">
+                                <h2 className="text-3xl font-black text-[#003366] italic mb-4">Consulta de Saldo</h2>
+
+                                {consultaError && (
+                                    <div className="bg-red-100 text-red-600 px-4 py-2 rounded-lg font-bold mb-4">
+                                        {consultaError}
+                                    </div>
+                                )}
+
+                                <div className="bg-white border-2 border-slate-200 rounded-2xl shadow-lg p-8 w-full max-w-2xl space-y-4">
+                                    <div className="flex justify-between border-b border-slate-200 pb-3">
+                                        <span className="font-bold text-slate-500">Número de cuenta</span>
+                                        <span className="font-black text-[#003366]">{saldoCuenta.numeroCuenta}</span>
+                                    </div>
+
+                                    <div className="flex justify-between border-b border-slate-200 pb-3">
+                                        <span className="font-bold text-slate-500">Tipo de cuenta</span>
+                                        <span className="font-black text-slate-700">{saldoCuenta.tipoCuenta || 'Caja de Ahorro'}</span>
+                                    </div>
+
+                                    <div className="flex justify-between border-b border-slate-200 pb-3">
+                                        <span className="font-bold text-slate-500">Moneda</span>
+                                        <span className="font-black text-slate-700">{saldoCuenta.moneda}</span>
+                                    </div>
+
+                                    <div className="flex justify-between items-center">
+                                        <span className="font-bold text-slate-500">Saldo disponible</span>
+                                        <span className="text-4xl font-black text-green-600">
+                    {saldoCuenta.moneda} {saldoCuenta.saldo}
+                </span>
+                                    </div>
+                                </div>
+
+                                <button
+                                    onClick={volverAlMenuTrasConsulta}
+                                    className="mt-8 bg-[#003366] text-white px-8 py-4 rounded-xl font-bold text-xl shadow-lg hover:bg-blue-900 active:scale-95 transition-all"
+                                >
+                                    VOLVER AL MENÚ
+                                </button>
+                            </div>
+                        )}
+
+                        {step === 'recent_withdrawals' && (
+                            <div className="w-full h-full flex flex-col items-center justify-center animate-in fade-in px-10">
+                                <h2 className="text-3xl font-black text-[#003366] italic mb-4">Últimos Retiros</h2>
+
+                                {consultaError && (
+                                    <div className="bg-red-100 text-red-600 px-4 py-2 rounded-lg font-bold mb-4">
+                                        {consultaError}
+                                    </div>
+                                )}
+
+                                <div className="bg-white border-2 border-slate-200 rounded-2xl shadow-lg p-6 w-full max-w-3xl">
+                                    {ultimosRetiros.length > 0 ? (
+                                        <div className="space-y-3">
+                                            {ultimosRetiros.map((tx, index) => (
+                                                <div key={index} className="flex justify-between items-center border-b border-slate-200 pb-3">
+                                                    <div>
+                                                        <p className="font-black text-[#003366]">{tx.tipoTransaccion}</p>
+                                                        <p className="text-xs text-slate-500">{tx.numeroReferencia}</p>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <p className="font-black text-red-600">
+                                                            Bs {Math.abs(tx.monto)}
+                                                        </p>
+                                                        <p className="text-xs text-slate-500">
+                                                            {tx.fechaHora}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="text-center py-8 text-slate-500 font-semibold">
+                                            No hay retiros recientes para mostrar.
+                                        </div>
+                                    )}
+                                </div>
+
+                                <button
+                                    onClick={volverAlMenuTrasConsulta}
+                                    className="mt-8 bg-[#003366] text-white px-8 py-4 rounded-xl font-bold text-xl shadow-lg hover:bg-blue-900 active:scale-95 transition-all"
+                                >
+                                    VOLVER AL MENÚ
                                 </button>
                             </div>
                         )}

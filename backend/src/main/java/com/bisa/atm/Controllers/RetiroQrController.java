@@ -6,7 +6,9 @@ import com.bisa.atm.Services.DispensacionService;
 import com.bisa.atm.Services.RetiroService;
 import com.bisa.atm.dto.ResultadoDispensacionDto;
 import com.bisa.atm.dto.SolicitudRetiroDto;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
@@ -22,19 +24,19 @@ public class RetiroQrController {
     private final RetiroService retiroService;
     private final CuentaBancariaRepository cuentaBancariaRepository;
 
-    //inyeccion de dependencias de retiro qr
-    public RetiroQrController(DispensacionService dispensacionService,
-                              RetiroService retiroService,CuentaBancariaRepository cuentaBancariaRepository) {
+    public RetiroQrController(
+            DispensacionService dispensacionService,
+            RetiroService retiroService,
+            CuentaBancariaRepository cuentaBancariaRepository
+    ) {
         this.dispensacionService = dispensacionService;
         this.retiroService = retiroService;
         this.cuentaBancariaRepository = cuentaBancariaRepository;
     }
 
-    // para reservar billetes para retiro qr
     @PostMapping("/reservar")
     public ResponseEntity<?> reservar(@RequestBody SolicitudRetiroDto request) {
         try {
-            // VALIDA SALDO PRIMERO
             CuentaBancaria cuenta = cuentaBancariaRepository.findById(request.getIdCuenta())
                     .orElseThrow(() -> new RuntimeException("Cuenta no encontrada"));
 
@@ -59,15 +61,18 @@ public class RetiroQrController {
         }
     }
 
-    // para confirmar el retiro qr y descontar el monto de la cuenta
     @PostMapping("/confirmar")
     public ResponseEntity<?> confirmar(
             @RequestParam Long idCuenta,
             @RequestBody ResultadoDispensacionDto resultado
     ) {
         try {
-            retiroService.confirmarRetiro(idCuenta, resultado);
-            return ResponseEntity.ok(Map.of("message", "Retiro confirmado correctamente"));
+            byte[] pdf = retiroService.confirmarRetiro(idCuenta, resultado);
+
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=comprobante-retiro.pdf")
+                    .contentType(MediaType.APPLICATION_PDF)
+                    .body(pdf);
 
         } catch (Exception e) {
             return ResponseEntity
@@ -76,7 +81,6 @@ public class RetiroQrController {
         }
     }
 
-    // para cancelar el retiro qr y liberar los billetes reservados
     @PostMapping("/cancelar")
     public ResponseEntity<?> cancelar(@RequestBody ResultadoDispensacionDto resultado) {
         try {
